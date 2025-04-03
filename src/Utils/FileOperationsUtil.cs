@@ -61,7 +61,7 @@ public class FileOperationsUtil : IFileOperationsUtil
 
         DeleteAllExceptCsproj(srcDirectory);
 
-        await _processUtil.Start("kiota", gitDirectory, $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n Soenneker.Cloudflare",
+        await _processUtil.Start("kiota", gitDirectory, $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n {Constants.Library}",
             waitForExit: true, cancellationToken: cancellationToken).NoSync();
 
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
