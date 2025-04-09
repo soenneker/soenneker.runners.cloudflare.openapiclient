@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Soenneker.Git.Util.Registrars;
 using Soenneker.Managers.Runners.Registrars;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
@@ -20,11 +19,11 @@ public static class Startup
 
     public static IServiceCollection SetupIoC(this IServiceCollection services)
     {
-        services.AddHostedService<ConsoleHostedService>();
-        services.AddScoped<IFileOperationsUtil, FileOperationsUtil>();
-        services.AddRunnersManagerAsScoped();
-        services.AddFileDownloadUtilAsScoped();
-        services.AddScoped<ICloudflareOpenApiFixer, CloudflareOpenApiFixer>();
+        services.AddHostedService<ConsoleHostedService>()
+                .AddScoped<IFileOperationsUtil, FileOperationsUtil>()
+                .AddRunnersManagerAsScoped()
+                .AddFileDownloadUtilAsScoped()
+                .AddScoped<ICloudflareOpenApiFixer, CloudflareOpenApiFixer>();
 
         return services;
     }
