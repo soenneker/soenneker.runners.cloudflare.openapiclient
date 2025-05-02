@@ -36,31 +36,34 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
             RenameConflictingPaths(document);
 
-            var validSchemas = new Dictionary<string, OpenApiSchema>();
             if (document.Components?.Schemas != null)
             {
-                foreach (KeyValuePair<string, OpenApiSchema> schema in document.Components.Schemas)
+                foreach (var schema in document.Components.Schemas.ToList())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
+                    string key = schema.Key;
                     OpenApiSchema value = schema.Value;
+
+                    if (!IsValidIdentifier(key))
+                        continue;
+
                     bool hasContent = !string.IsNullOrWhiteSpace(value.Type) || (value.Properties?.Count > 0) ||
                                       value.AllOf.Count > 0 || value.AnyOf.Count > 0 || value.OneOf.Count > 0;
 
                     if (!hasContent)
                     {
-                        validSchemas[schema.Key] = new OpenApiSchema
+                        document.Components.Schemas[key] = new OpenApiSchema
                         {
                             Type = "object",
                             Description = "Replaced invalid or empty original schema"
                         };
-                        continue;
                     }
-
-                    validSchemas.Add(schema.Key, value);
                 }
 
-                document.Components.Schemas = validSchemas;
+                var invalidKeys = document.Components.Schemas.Keys.Where(k => !IsValidIdentifier(k)).ToList();
+                foreach (var key in invalidKeys)
+                    document.Components.Schemas.Remove(key);
             }
 
             var validPaths = new OpenApiPaths();
@@ -147,6 +150,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
             document.Paths = validPaths;
             ScrubComponentRefs(document, cancellationToken);
+            RemoveInvalidComponentResponses(document.Components);
 
             await using var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
             await using var textWriter = new StreamWriter(fileStream);
@@ -331,5 +335,21 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 entry.Value.Reference = null;
             }
         }
+    }
+
+    private static void RemoveInvalidComponentResponses(OpenApiComponents components)
+    {
+        if (components.Responses == null)
+            return;
+
+        var valid = new Dictionary<string, OpenApiResponse>();
+
+        foreach (var kvp in components.Responses)
+        {
+            if (IsValidResponseKey(kvp.Key))
+                valid[kvp.Key] = kvp.Value;
+        }
+
+        components.Responses = valid;
     }
 }
