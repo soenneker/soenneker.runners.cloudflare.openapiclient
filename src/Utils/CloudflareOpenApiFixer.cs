@@ -15,7 +15,6 @@ namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 {
     private readonly ILogger<CloudflareOpenApiFixer> _logger;
-
     private readonly HashSet<OpenApiSchema> _visitedSchemas = [];
 
     public CloudflareOpenApiFixer(ILogger<CloudflareOpenApiFixer> logger)
@@ -37,7 +36,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
             RenameConflictingPaths(document);
 
-            // Clean schemas
             var validSchemas = new Dictionary<string, OpenApiSchema>();
             if (document.Components?.Schemas != null)
             {
@@ -65,7 +63,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 document.Components.Schemas = validSchemas;
             }
 
-            // Clean paths and scrub bad $refs
             var validPaths = new OpenApiPaths();
             foreach (KeyValuePair<string, OpenApiPathItem> kvp in document.Paths)
             {
@@ -90,20 +87,15 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         OpenApiResponse resp = response.Value;
 
                         if (!IsValidSchemaReference(resp.Reference, document))
-                        {
-                            _logger.LogWarning("Removed invalid response $ref in {Path} for status code {Code}", path, statusCode);
                             continue;
-                        }
 
-                        ScrubBrokenRefs(resp.Content, document, path, $"response {statusCode}");
-
+                        ScrubBrokenRefs(resp.Content, document);
                         if (statusCode == "4xx")
                         {
                             updatedResponses["4XX"] = resp;
                         }
                         else if (!IsValidResponseKey(statusCode))
                         {
-                            _logger.LogWarning("Removed invalid response key: {Code} in {Path}", statusCode, path);
                             continue;
                         }
                         else
@@ -125,12 +117,11 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     OpenApiRequestBody? reqBody = operation.Value.RequestBody;
                     if (!IsValidSchemaReference(reqBody?.Reference, document))
                     {
-                        _logger.LogWarning("Removed invalid request body ref in {Path}", path);
                         operation.Value.RequestBody = null;
                     }
                     else
                     {
-                        ScrubBrokenRefs(reqBody?.Content, document, path, "requestBody");
+                        ScrubBrokenRefs(reqBody?.Content, document);
                     }
 
                     if (operation.Value.Parameters != null)
@@ -141,12 +132,9 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                             cancellationToken.ThrowIfCancellationRequested();
 
                             if (!IsValidSchemaReference(param.Reference, document))
-                            {
-                                _logger.LogWarning("Removed invalid parameter ref: {Name} in {Path}", param.Name, path);
                                 continue;
-                            }
 
-                            ScrubBrokenRefs(param.Schema, document, path, $"parameter {param.Name}");
+                            ScrubBrokenRefs(param.Schema, document);
                             validParams.Add(param);
                         }
 
@@ -158,11 +146,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             }
 
             document.Paths = validPaths;
-
-            // Final component scrub
             ScrubComponentRefs(document, cancellationToken);
 
-            // Output
             await using var fileStream = new FileStream(targetFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
             await using var textWriter = new StreamWriter(fileStream);
             var writer = new Microsoft.OpenApi.Writers.OpenApiJsonWriter(textWriter);
@@ -210,17 +195,15 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         };
     }
 
-    private void ScrubBrokenRefs(IDictionary<string, OpenApiMediaType>? contentDict, OpenApiDocument document, string path, string context)
+    private void ScrubBrokenRefs(IDictionary<string, OpenApiMediaType>? contentDict, OpenApiDocument document)
     {
-        if (contentDict == null)
-            return;
+        if (contentDict == null) return;
 
         foreach (string key in contentDict.Keys.ToList())
         {
-            OpenApiSchema? schema = contentDict[key].Schema;
+            var schema = contentDict[key].Schema;
             if (!IsValidSchemaReference(schema?.Reference, document))
             {
-                _logger.LogWarning("Removed invalid content $ref in {Path} ({Context})", path, context);
                 contentDict[key].Schema = new OpenApiSchema
                 {
                     Type = "object",
@@ -234,11 +217,10 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         }
     }
 
-    private void ScrubBrokenRefs(OpenApiSchema? schema, OpenApiDocument document, string path, string context)
+    private void ScrubBrokenRefs(OpenApiSchema? schema, OpenApiDocument document)
     {
         if (schema?.Reference != null && !IsValidSchemaReference(schema.Reference, document))
         {
-            _logger.LogWarning("Scrubbed invalid schema $ref in {Path} ({Context})", path, context);
             schema.Reference = null;
             schema.Type = "object";
             schema.Description = "Removed invalid $ref";
@@ -269,55 +251,53 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
     private void ScrubComponentRefs(OpenApiDocument document, CancellationToken cancellationToken)
     {
-        void PatchSchema(OpenApiSchema? schema, string context)
+        void PatchSchema(OpenApiSchema? schema)
         {
             if (schema?.Reference != null && !IsValidSchemaReference(schema.Reference, document))
             {
-                _logger.LogWarning("Removed invalid component $ref ({Context})", context);
                 schema.Reference = null;
                 schema.Type = "object";
                 schema.Description = "Patched invalid $ref";
             }
         }
 
-        void PatchContent(IDictionary<string, OpenApiMediaType>? contentDict, string context)
+        void PatchContent(IDictionary<string, OpenApiMediaType>? contentDict)
         {
             if (contentDict == null) return;
-
             foreach (var content in contentDict.Values)
             {
-                PatchSchema(content.Schema, context);
+                PatchSchema(content.Schema);
             }
         }
 
         foreach (var kv in document.Components.RequestBodies)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PatchContent(kv.Value.Content, $"requestBody {kv.Key}");
+            PatchContent(kv.Value.Content);
         }
 
         foreach (var kv in document.Components.Responses)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PatchContent(kv.Value.Content, $"response {kv.Key}");
+            PatchContent(kv.Value.Content);
         }
 
         foreach (var kv in document.Components.Parameters)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PatchSchema(kv.Value.Schema, $"parameter {kv.Key}");
+            PatchSchema(kv.Value.Schema);
         }
 
         foreach (var kv in document.Components.Headers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PatchSchema(kv.Value.Schema, $"header {kv.Key}");
+            PatchSchema(kv.Value.Schema);
         }
 
-        ScrubTopLevelComponentRefs(document.Components.RequestBodies, "requestBodies", document);
-        ScrubTopLevelComponentRefs(document.Components.Responses, "responses", document);
-        ScrubTopLevelComponentRefs(document.Components.Parameters, "parameters", document);
-        ScrubTopLevelComponentRefs(document.Components.Headers, "headers", document);
+        ScrubTopLevelComponentRefs(document.Components.RequestBodies, document);
+        ScrubTopLevelComponentRefs(document.Components.Responses, document);
+        ScrubTopLevelComponentRefs(document.Components.Parameters, document);
+        ScrubTopLevelComponentRefs(document.Components.Headers, document);
     }
 
     private void RenameConflictingPaths(OpenApiDocument document)
@@ -330,13 +310,9 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             string newPath = originalPath;
 
             if (originalPath.EndsWith("/item"))
-            {
                 newPath = originalPath.Replace("/item", "/item_static");
-            }
             else if (originalPath.Contains("/item/{"))
-            {
                 newPath = originalPath.Replace("/item", "/item_by_id");
-            }
 
             newPaths.Add(newPath, kvp.Value);
         }
@@ -344,7 +320,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         document.Paths = newPaths;
     }
 
-    private void ScrubTopLevelComponentRefs<T>(IDictionary<string, T> components, string componentType, OpenApiDocument document)
+    private void ScrubTopLevelComponentRefs<T>(IDictionary<string, T> components, OpenApiDocument document)
         where T : IOpenApiReferenceable
     {
         foreach (var entry in components)
@@ -352,7 +328,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             var reference = entry.Value.Reference;
             if (!IsValidSchemaReference(reference, document))
             {
-                _logger.LogWarning("Scrubbed invalid top-level $ref from {ComponentType} component: {Key}", componentType, entry.Key);
                 entry.Value.Reference = null;
             }
         }
