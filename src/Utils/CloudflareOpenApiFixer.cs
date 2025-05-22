@@ -275,56 +275,53 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
         document.Paths = validPaths;
 
-        List<string> waitingRoomReqs = null;
-        if (comps != null && comps.TryGetValue("waitingroom_api-response-common", out var placeholder))
-        {
-            waitingRoomReqs = placeholder.Required?.ToList() ?? new List<string>();
-        }
-
-        // 2) Now do your general “empty‐object” pass—BUT don’t clear waitingroom’s Required
         if (comps != null)
         {
             foreach (var kv in comps)
             {
-                var name = kv.Key;
                 var schema = kv.Value;
-                var isEmptyObject =
+
+                // 1) is this an object with only 'required' names, but no real props/items/oneOf/etc?
+                var onlyHasRequired =
+                    schema.Type == "object"
+                    && (schema.Properties == null || schema.Properties.Count == 0)
+                    && schema.Items == null
+                    && !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any()
+                    && schema.AdditionalProperties == null
+                    && schema.Required?.Any() == true;
+
+                if (onlyHasRequired)
+                {
+                    // inject a property schema for each required name
+                    var reqs = schema.Required.ToList();
+                    schema.Properties = reqs.ToDictionary(
+                        name => name,
+                        _ => new OpenApiSchema { Type = "object" }
+                    );
+                    // leave Required intact
+                    // allow extras
+                    schema.AdditionalProperties = new OpenApiSchema { Type = "object" };
+                    schema.AdditionalPropertiesAllowed = true;
+                    continue;
+                }
+
+                // 2) truly empty object (no props, no required)
+                var isTrulyEmpty =
                     schema.Type == "object"
                     && (schema.Properties == null || schema.Properties.Count == 0)
                     && schema.Items == null
                     && !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any()
                     && schema.AdditionalProperties == null;
 
-                if (!isEmptyObject)
-                    continue;
-
-                // stub a minimal dictionary so Kiota won’t error
-                schema.Properties = new Dictionary<string, OpenApiSchema>();
-                schema.AdditionalProperties = new OpenApiSchema { Type = "object" };
-                schema.AdditionalPropertiesAllowed = true;
-
-                // Only clear Required for everything *except* our special case
-                if (name != "waitingroom_api-response-common")
+                if (isTrulyEmpty)
+                {
+                    schema.Properties = new Dictionary<string, OpenApiSchema>();
+                    schema.AdditionalProperties = new OpenApiSchema { Type = "object" };
+                    schema.AdditionalPropertiesAllowed = true;
+                    // clear any stray required
                     schema.Required = new HashSet<string>();
+                }
             }
-        }
-
-        // 3) Finally, re-inject the real (or stubbed) properties for waitingroom_api-response-common
-        if (waitingRoomReqs != null && comps.TryGetValue("waitingroom_api-response-common", out var wr))
-        {
-            // stub each required as a generic object (or give them real schemas)
-            wr.Properties = waitingRoomReqs
-                .ToDictionary(
-                    name => name,
-                    _ => new OpenApiSchema { Type = "object" }
-                );
-
-            // put the required list back
-            wr.Required = new HashSet<string>(waitingRoomReqs);
-
-            // still allow arbitrary extra fields
-            wr.AdditionalProperties = new OpenApiSchema { Type = "object" };
-            wr.AdditionalPropertiesAllowed = true;
         }
     }
 
