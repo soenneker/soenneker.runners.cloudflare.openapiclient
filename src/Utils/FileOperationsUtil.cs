@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Soenneker.Extensions.String;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Git.Util.Abstract;
@@ -14,6 +8,15 @@ using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Download.Abstract;
 using Soenneker.Utils.FileSync.Abstract;
 using Soenneker.Utils.Process.Abstract;
+using Soenneker.Utils.Usings;
+using Soenneker.Utils.Usings.Abstract;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 
@@ -27,9 +30,10 @@ public class FileOperationsUtil : IFileOperationsUtil
     private readonly ICloudflareOpenApiFixer _cloudflareOpenApiFixer;
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IFileUtilSync _fileUtilSync;
+    private readonly IUsingsUtil _usingsUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil, IProcessUtil processUtil,
-        ICloudflareOpenApiFixer cloudflareOpenApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtilSync fileUtilSync)
+        ICloudflareOpenApiFixer cloudflareOpenApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtilSync fileUtilSync, IUsingsUtil usingsUtil)
     {
         _logger = logger;
         _gitUtil = gitUtil;
@@ -38,6 +42,7 @@ public class FileOperationsUtil : IFileOperationsUtil
         _cloudflareOpenApiFixer = cloudflareOpenApiFixer;
         _fileDownloadUtil = fileDownloadUtil;
         _fileUtilSync = fileUtilSync;
+        _usingsUtil = usingsUtil;
     }
 
     public async ValueTask Process(CancellationToken cancellationToken = default)
@@ -64,7 +69,16 @@ public class FileOperationsUtil : IFileOperationsUtil
         await _processUtil.Start("kiota", gitDirectory, $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n {Constants.Library}",
             waitForExit: true, cancellationToken: cancellationToken).NoSync();
 
-        await BuildAndPush(gitDirectory, cancellationToken).NoSync();
+        // **NEW** post‐process the generated code
+        PostProcessKiotaClient(srcDirectory);
+
+        string projFilePath = Path.Combine(gitDirectory, "src", $"{Constants.Library}.csproj");
+
+        await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
+
+        await _usingsUtil.AddMissing(Path.Combine(srcDirectory, Constants.Library + ".csproj"));
+
+        //   await BuildAndPush(gitDirectory, cancellationToken).NoSync();
     }
 
     public void DeleteAllExceptCsproj(string directoryPath)
@@ -117,6 +131,42 @@ public class FileOperationsUtil : IFileOperationsUtil
             _logger.LogError(ex, "An error occurred while cleaning the directory: {DirectoryPath}", directoryPath);
         }
     }
+
+    // call this right after kiota generate
+    private void PostProcessKiotaClient(string srcDirectory)
+    {
+        var csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
+
+        // Regex to find properties whose name starts with a digit
+        var propDeclRx = new Regex(@"public\s+([\w<>,\?\[\]]+)\s+([0-9]\w*)");
+        // Regex to fix GetFieldDeserializers entries
+        var deserRx = new Regex(@"\{\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*n\s*=>\s*\{\s*(?<name>[0-9]\w*)");
+        // Regex to fix all Write*Value calls in Serialize
+        var writeRx = new Regex(@"\bWrite(?:StringValue|BoolValue|NumberValue|CollectionOfPrimitiveValues<[^>]+>|CollectionOfObjectValues<[^>]+>|ObjectValue<[^>]+>)" +
+                                @"\(\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*(?<name>[0-9]\w*)\s*\)");
+
+        foreach (var file in csFiles)
+        {
+            var text = File.ReadAllText(file);
+            var original = text;
+
+            // 1) Prefix any public property starting with a digit
+            text = propDeclRx.Replace(text, m =>
+                $"public {m.Groups[1].Value} N{m.Groups[2].Value}");
+
+            // 2) In deserializer, assign into the new name but keep JSON key
+            text = deserRx.Replace(text, m =>
+                $"{{ \"{m.Groups["json"].Value}\", n => {{ N{m.Groups["name"].Value}");
+
+            // 3) In Serialize, use new name but still write original JSON key
+            text = writeRx.Replace(text, m =>
+                $"{m.Value.Substring(0, m.Value.IndexOf('(') + 1)}\"{m.Groups["json"].Value}\", N{m.Groups["name"].Value})");
+
+            if (text != original)
+                File.WriteAllText(file, text);
+        }
+    }
+
 
     private async ValueTask BuildAndPush(string gitDirectory, CancellationToken cancellationToken)
     {

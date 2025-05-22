@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Interfaces;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
@@ -8,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -42,6 +44,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             ScrubComponentRefs(document, cancellationToken);
             ExtractInlineSchemas(document, cancellationToken);
 
+            FixAllInlineValueEnums(document);
+
             await using var outFs = new FileStream(targetFilePath, FileMode.Create);
             await using var tw = new StreamWriter(outFs);
             var jw = new Microsoft.OpenApi.Writers.OpenApiJsonWriter(tw);
@@ -59,6 +63,49 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             _logger.LogError(ex, "Error during OpenAPI fix");
             Console.WriteLine($"CRASH: {ex}");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// For every component schema that has an inline 'value' object,
+    /// if there is a sibling schema named '{SchemaName}_value' that is
+    /// actually an enum, replace the inline 'value' with a reference
+    /// to that enum schema.
+    /// </summary>
+    private void FixAllInlineValueEnums(OpenApiDocument document)
+    {
+        var comps = document.Components?.Schemas;
+        if (comps == null)
+            return;
+
+        // We snapshot the keys because we may rewrite Props in the loop
+        foreach (var kv in comps.ToList())
+        {
+            var schema = kv.Value;
+            var parentKey = kv.Key;
+
+            // Only interested in schemas that declare a 'value' property
+            if (schema.Properties == null || !schema.Properties.ContainsKey("value"))
+                continue;
+
+            // Look for sibling enum component named '<parentKey>_value'
+            var enumKey = $"{parentKey}_value";
+            if (!comps.TryGetValue(enumKey, out var enumSchema))
+                continue;
+
+            // Confirm it's actually an enum (string type + enum values)
+            if (enumSchema.Enum == null || enumSchema.Enum.Count == 0)
+                continue;
+
+            // Replace the inline 'value' object with a $ref to the enum
+            schema.Properties["value"] = new OpenApiSchema
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.Schema,
+                    Id = enumKey
+                }
+            };
         }
     }
 
@@ -107,8 +154,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             // Union types: explicit object
             foreach (var schema in comps.Values)
             {
-                if (string.IsNullOrWhiteSpace(schema.Type)
-                    && (schema.OneOf.Any() || schema.AnyOf.Any() || schema.AllOf.Any()))
+                if (string.IsNullOrWhiteSpace(schema.Type) && (schema.OneOf.Any() || schema.AnyOf.Any() || schema.AllOf.Any()))
                 {
                     schema.Type = "object";
                 }
@@ -140,6 +186,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                             Description = "Union discriminator"
                         };
                     }
+
                     // build mapping
                     foreach (var branch in schema.OneOf)
                     {
@@ -155,9 +202,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             // Schemas with properties or additionalProperties need explicit object type
             foreach (var schema in comps.Values)
             {
-                var hasProps = (schema.Properties != null && schema.Properties.Any())
-                               || schema.AdditionalProperties != null
-                               || schema.AdditionalPropertiesAllowed;
+                var hasProps = (schema.Properties != null && schema.Properties.Any()) || schema.AdditionalProperties != null ||
+                               schema.AdditionalPropertiesAllowed;
                 if (hasProps && string.IsNullOrWhiteSpace(schema.Type))
                 {
                     schema.Type = "object";
@@ -171,14 +217,9 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             foreach (var key in comps.Keys.ToList())
             {
                 var schema = comps[key];
-                if ((schema.Type == "string" || schema.Type == "integer" || schema.Type == "number" || schema.Type == "boolean")
-                    && (schema.Properties == null || !schema.Properties.Any())
-                    && schema.Items == null
-                    && !schema.AllOf.Any()
-                    && !schema.AnyOf.Any()
-                    && !schema.OneOf.Any()
-                    && (schema.Enum == null || !schema.Enum.Any())
-                    && schema.AdditionalProperties == null)
+                if ((schema.Type == "string" || schema.Type == "integer" || schema.Type == "number" || schema.Type == "boolean") &&
+                    (schema.Properties == null || !schema.Properties.Any()) && schema.Items == null && !schema.AllOf.Any() && !schema.AnyOf.Any() &&
+                    !schema.OneOf.Any() && (schema.Enum == null || !schema.Enum.Any()) && schema.AdditionalProperties == null)
                 {
                     // Wrap primitive into an object with required 'value' property to satisfy Kiota
                     comps[key] = new OpenApiSchema
@@ -190,7 +231,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         {
                             ["value"] = schema
                         },
-                        Required = new HashSet<string> { "value" }
+                        Required = new HashSet<string> {"value"}
                     };
                 }
             }
@@ -215,19 +256,15 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     // Normalize media type keys
                     if (resp.Content != null)
                     {
-                        resp.Content = resp.Content
-                            .ToDictionary(
-                                p => NormalizeMediaType(p.Key),
-                                p => p.Value);
+                        resp.Content = resp.Content.ToDictionary(p => NormalizeMediaType(p.Key), p => p.Value);
                     }
+
                     ScrubBrokenRefs(resp.Content, document);
 
                     // Keep only valid content
                     if (resp.Content != null)
                     {
-                        var valid = resp.Content
-                            .Where(p => p.Value.Schema?.Reference != null || !IsMediaEmpty(p.Value))
-                            .ToDictionary(p => p.Key, p => p.Value);
+                        var valid = resp.Content.Where(p => p.Value.Schema?.Reference != null || !IsMediaEmpty(p.Value)).ToDictionary(p => p.Key, p => p.Value);
 
                         if (valid.Any())
                         {
@@ -240,6 +277,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         }
                     }
                 }
+
                 operation.Responses = newResps.Any() ? newResps : CreateFallbackResponses();
 
                 // RequestBody
@@ -248,18 +286,14 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     var rb = operation.RequestBody;
                     if (rb.Content != null)
                     {
-                        rb.Content = rb.Content
-                            .ToDictionary(
-                                p => NormalizeMediaType(p.Key),
-                                p => p.Value);
+                        rb.Content = rb.Content.ToDictionary(p => NormalizeMediaType(p.Key), p => p.Value);
                     }
+
                     ScrubBrokenRefs(rb.Content, document);
-                    var validRb = rb.Content?
-                        .Where(p => p.Value.Schema?.Reference != null || !IsMediaEmpty(p.Value))
-                        .ToDictionary(p => p.Key, p => p.Value);
+                    var validRb = rb.Content?.Where(p => p.Value.Schema?.Reference != null || !IsMediaEmpty(p.Value)).ToDictionary(p => p.Key, p => p.Value);
 
                     operation.RequestBody = (validRb != null && validRb.Any())
-                        ? new OpenApiRequestBody { Description = rb.Description, Content = validRb }
+                        ? new OpenApiRequestBody {Description = rb.Description, Content = validRb}
                         : CreateFallbackRequestBody();
                 }
                 else
@@ -282,41 +316,30 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 var schema = kv.Value;
 
                 // 1) is this an object with only 'required' names, but no real props/items/oneOf/etc?
-                var onlyHasRequired =
-                    schema.Type == "object"
-                    && (schema.Properties == null || schema.Properties.Count == 0)
-                    && schema.Items == null
-                    && !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any()
-                    && schema.AdditionalProperties == null
-                    && schema.Required?.Any() == true;
+                var onlyHasRequired = schema.Type == "object" && (schema.Properties == null || schema.Properties.Count == 0) && schema.Items == null &&
+                                      !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any() && schema.AdditionalProperties == null &&
+                                      schema.Required?.Any() == true;
 
                 if (onlyHasRequired)
                 {
                     // inject a property schema for each required name
                     var reqs = schema.Required.ToList();
-                    schema.Properties = reqs.ToDictionary(
-                        name => name,
-                        _ => new OpenApiSchema { Type = "object" }
-                    );
+                    schema.Properties = reqs.ToDictionary(name => name, _ => new OpenApiSchema {Type = "object"});
                     // leave Required intact
                     // allow extras
-                    schema.AdditionalProperties = new OpenApiSchema { Type = "object" };
+                    schema.AdditionalProperties = new OpenApiSchema {Type = "object"};
                     schema.AdditionalPropertiesAllowed = true;
                     continue;
                 }
 
                 // 2) truly empty object (no props, no required)
-                var isTrulyEmpty =
-                    schema.Type == "object"
-                    && (schema.Properties == null || schema.Properties.Count == 0)
-                    && schema.Items == null
-                    && !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any()
-                    && schema.AdditionalProperties == null;
+                var isTrulyEmpty = schema.Type == "object" && (schema.Properties == null || schema.Properties.Count == 0) && schema.Items == null &&
+                                   !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any() && schema.AdditionalProperties == null;
 
                 if (isTrulyEmpty)
                 {
                     schema.Properties = new Dictionary<string, OpenApiSchema>();
-                    schema.AdditionalProperties = new OpenApiSchema { Type = "object" };
+                    schema.AdditionalProperties = new OpenApiSchema {Type = "object"};
                     schema.AdditionalPropertiesAllowed = true;
                     // clear any stray required
                     schema.Required = new HashSet<string>();
@@ -401,7 +424,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         {
                             var compName = $"{safeOpId}_RequestBody_{SanitizeName(mediaType)}";
                             AddComponentSchema(document, compName, schema);
-                            media.Schema = new OpenApiSchema { Reference = new OpenApiReference { Type = ReferenceType.Schema, Id = compName } };
+                            media.Schema = new OpenApiSchema {Reference = new OpenApiReference {Type = ReferenceType.Schema, Id = compName}};
                         }
                     }
                 }
@@ -415,7 +438,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         {
                             var compName = $"{safeOpId}_Param_{SanitizeName(param.Name)}";
                             AddComponentSchema(document, compName, schema);
-                            param.Schema = new OpenApiSchema { Reference = new OpenApiReference { Type = ReferenceType.Schema, Id = compName } };
+                            param.Schema = new OpenApiSchema {Reference = new OpenApiReference {Type = ReferenceType.Schema, Id = compName}};
                         }
                     }
                 }
@@ -431,7 +454,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                             {
                                 var compName = $"{safeOpId}_Response_{SanitizeName(statusCode)}_{SanitizeName(mediaType)}";
                                 AddComponentSchema(document, compName, schema);
-                                media.Schema = new OpenApiSchema { Reference = new OpenApiReference { Type = ReferenceType.Schema, Id = compName } };
+                                media.Schema = new OpenApiSchema {Reference = new OpenApiReference {Type = ReferenceType.Schema, Id = compName}};
                             }
                         }
                     }
@@ -456,7 +479,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             foreach (var s in schema.OneOf) ScrubAllRefsRename(s);
             foreach (var s in schema.AnyOf) ScrubAllRefsRename(s);
             if (schema.Properties != null)
-                foreach (var prop in schema.Properties.Values) ScrubAllRefsRename(prop);
+                foreach (var prop in schema.Properties.Values)
+                    ScrubAllRefsRename(prop);
             if (schema.Items != null)
                 ScrubAllRefsRename(schema.Items);
             if (schema.AdditionalProperties != null)
@@ -520,17 +544,15 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             if (char.IsLetterOrDigit(c) || c == '_') sb.Append(c);
             else sb.Append('_');
         }
+
         return sb.ToString();
     }
 
 
-    private static bool IsValidResponseKey(string key)
-        => key == "default"
-           || key is "1XX" or "2XX" or "3XX" or "4XX" or "5XX"
-           || (int.TryParse(key, out var s) && s >= 100 && s <= 599);
+    private static bool IsValidResponseKey(string key) =>
+        key == "default" || key is "1XX" or "2XX" or "3XX" or "4XX" or "5XX" || (int.TryParse(key, out var s) && s >= 100 && s <= 599);
 
-    private static bool IsValidIdentifier(string id)
-        => !string.IsNullOrWhiteSpace(id) && id.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-');
+    private static bool IsValidIdentifier(string id) => !string.IsNullOrWhiteSpace(id) && id.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-');
 
     private static bool IsValidSchemaReference(OpenApiReference? reference, OpenApiDocument doc)
     {
@@ -559,6 +581,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 schema.Reference = null;
                 _logger.LogWarning("Removed broken media-type ref @ {Key}", key);
             }
+
             ScrubAllRefs(schema, doc);
         }
     }
@@ -570,6 +593,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             schema.Reference = null;
             _logger.LogWarning("Cleared broken ref for schema {Schema}", schema.Title ?? "(no title)");
         }
+
         ScrubAllRefs(schema, doc);
     }
 
@@ -581,6 +605,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             schema.Reference = null;
             _logger.LogWarning("Cleared nested broken ref for schema {Schema}", schema.Title ?? "(no title)");
         }
+
         foreach (var s in schema.AllOf) ScrubAllRefs(s, doc);
         foreach (var s in schema.OneOf) ScrubAllRefs(s, doc);
         foreach (var s in schema.AnyOf) ScrubAllRefs(s, doc);
@@ -597,15 +622,37 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 _logger.LogWarning("Patched invalid component ref {Schema}", sch.Title ?? "(no title)");
             }
         }
+
         void PatchContent(IDictionary<string, OpenApiMediaType>? content)
         {
             if (content == null) return;
             foreach (var media in content.Values) PatchSchema(media.Schema);
         }
-        foreach (var kv in doc.Components.RequestBodies) { cancellationToken.ThrowIfCancellationRequested(); PatchContent(kv.Value.Content); }
-        foreach (var kv in doc.Components.Responses) { cancellationToken.ThrowIfCancellationRequested(); PatchContent(kv.Value.Content); }
-        foreach (var kv in doc.Components.Parameters) { cancellationToken.ThrowIfCancellationRequested(); PatchSchema(kv.Value.Schema); }
-        foreach (var kv in doc.Components.Headers) { cancellationToken.ThrowIfCancellationRequested(); PatchSchema(kv.Value.Schema); }
+
+        foreach (var kv in doc.Components.RequestBodies)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PatchContent(kv.Value.Content);
+        }
+
+        foreach (var kv in doc.Components.Responses)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PatchContent(kv.Value.Content);
+        }
+
+        foreach (var kv in doc.Components.Parameters)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PatchSchema(kv.Value.Schema);
+        }
+
+        foreach (var kv in doc.Components.Headers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PatchSchema(kv.Value.Schema);
+        }
+
         ScrubTopLevelComponentRefs(doc.Components.RequestBodies, doc);
         ScrubTopLevelComponentRefs(doc.Components.Responses, doc);
         ScrubTopLevelComponentRefs(doc.Components.Parameters, doc);
@@ -625,11 +672,11 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 newPath = originalPath.Replace("/item", "/item_by_id");
             newPaths.Add(newPath, kvp.Value);
         }
+
         doc.Paths = newPaths;
     }
 
-    private void ScrubTopLevelComponentRefs<T>(IDictionary<string, T> comps, OpenApiDocument doc)
-        where T : IOpenApiReferenceable
+    private void ScrubTopLevelComponentRefs<T>(IDictionary<string, T> comps, OpenApiDocument doc) where T : IOpenApiReferenceable
     {
         foreach (var entry in comps)
         {
@@ -650,10 +697,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
     private static bool IsMediaEmpty(OpenApiMediaType media)
     {
-        var schemaEmpty = media.Schema == null
-                          || (string.IsNullOrWhiteSpace(media.Schema.Type)
-                              && (media.Schema.Properties == null || !media.Schema.Properties.Any())
-                              && media.Schema.Items == null);
+        var schemaEmpty = media.Schema == null || (string.IsNullOrWhiteSpace(media.Schema.Type) &&
+                                                   (media.Schema.Properties == null || !media.Schema.Properties.Any()) && media.Schema.Items == null);
         var hasExample = media.Example != null || (media.Examples != null && media.Examples.Any());
         return schemaEmpty && !hasExample;
     }
@@ -661,15 +706,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
     private static bool IsSchemaEmpty(OpenApiSchema schema)
     {
-        return schema == null
-               || (string.IsNullOrWhiteSpace(schema.Type)
-                   && (schema.Properties == null || !schema.Properties.Any())
-                   && !schema.AllOf.Any()
-                   && !schema.OneOf.Any()
-                   && !schema.AnyOf.Any()
-                   && schema.Items == null
-                   && (schema.Enum == null || !schema.Enum.Any())
-                   && schema.AdditionalProperties == null
-                   && !schema.AdditionalPropertiesAllowed);
+        return schema == null || (string.IsNullOrWhiteSpace(schema.Type) && (schema.Properties == null || !schema.Properties.Any()) && !schema.AllOf.Any() &&
+                                  !schema.OneOf.Any() && !schema.AnyOf.Any() && schema.Items == null && (schema.Enum == null || !schema.Enum.Any()) &&
+                                  schema.AdditionalProperties == null && !schema.AdditionalPropertiesAllowed);
     }
 }

@@ -3,6 +3,7 @@ using Soenneker.Managers.Runners.Registrars;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.File.Download.Registrars;
+using Soenneker.Utils.Usings.Registrars;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient;
 
@@ -23,7 +24,8 @@ public static class Startup
                 .AddScoped<IFileOperationsUtil, FileOperationsUtil>()
                 .AddRunnersManagerAsScoped()
                 .AddFileDownloadUtilAsScoped()
-                .AddScoped<ICloudflareOpenApiFixer, CloudflareOpenApiFixer>();
+                .AddScoped<ICloudflareOpenApiFixer, CloudflareOpenApiFixer>()
+                .AddUsingsUtilAsScoped();
 
         return services;
     }
