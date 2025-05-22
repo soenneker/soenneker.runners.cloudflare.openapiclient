@@ -48,7 +48,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             document.SerializeAsV3(jw);
             await tw.FlushAsync(cancellationToken);
 
-            Console.WriteLine("Cleaned OpenAPI spec saved to " + targetFilePath);
+            Console.WriteLine($"Cleaned OpenAPI spec saved to {targetFilePath}");
         }
         catch (OperationCanceledException)
         {
@@ -57,7 +57,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during OpenAPI fix");
-            Console.WriteLine("CRASH: " + ex);
+            Console.WriteLine($"CRASH: {ex}");
             throw;
         }
     }
@@ -117,7 +117,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
                 if (!hasContent)
                 {
-                    var fallback = new OpenApiSchema
+                    comps[key] = new OpenApiSchema
                     {
                         Type = "object",
                         Title = key,
@@ -125,9 +125,8 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                         AdditionalPropertiesAllowed = true,
                         AdditionalProperties = new OpenApiSchema { Type = "object" }
                     };
-                    comps[key] = fallback;
                 }
-                else if (!string.IsNullOrWhiteSpace(key) && string.IsNullOrWhiteSpace(schema.Title))
+                else if (string.IsNullOrWhiteSpace(schema.Title))
                 {
                     schema.Title = key;
                 }
@@ -140,16 +139,16 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 {
                     schema.Type = "object";
                 }
-                var disc = schema.Discriminator;
-                if (disc?.PropertyName != null)
+
+                if (schema.Discriminator?.PropertyName is string propName)
                 {
                     schema.Properties ??= new Dictionary<string, OpenApiSchema>();
-                    if (!schema.Properties.ContainsKey(disc.PropertyName))
+                    if (!schema.Properties.ContainsKey(propName))
                     {
-                        schema.Properties[disc.PropertyName] = new OpenApiSchema
+                        schema.Properties[propName] = new OpenApiSchema
                         {
                             Type = "string",
-                            Title = disc.PropertyName,
+                            Title = propName,
                             Description = "Discriminator property"
                         };
                     }
@@ -169,7 +168,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     && (schema.Enum == null || !schema.Enum.Any())
                     && schema.AdditionalProperties == null)
                 {
-                    var wrapper = new OpenApiSchema
+                    comps[kv.Key] = new OpenApiSchema
                     {
                         Type = "object",
                         Title = kv.Key,
@@ -179,7 +178,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                             ["value"] = schema
                         }
                     };
-                    comps[kv.Key] = wrapper;
                 }
             }
         }
@@ -192,7 +190,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             foreach (var op in item.Operations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                // Responses
+
                 var newResps = new OpenApiResponses();
                 foreach (var (code, resp) in op.Value.Responses)
                 {
@@ -200,7 +198,10 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     ScrubBrokenRefs(resp.Content, document);
                     if (resp.Content != null)
                     {
-                        var emptyMedia = resp.Content.Keys.Where(k => IsSchemaEmpty(resp.Content[k].Schema)).ToList();
+                        var emptyMedia = resp.Content
+                            .Where(pair => IsMediaEmpty(pair.Value))
+                            .Select(pair => pair.Key)
+                            .ToList();
                         foreach (var k in emptyMedia) resp.Content.Remove(k);
                     }
                     if (resp.Content == null || !resp.Content.Any()) continue;
@@ -208,38 +209,29 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     else if (!IsValidResponseKey(code)) continue;
                     else newResps[code] = resp;
                 }
-                op.Value.Responses = newResps.Any()
-                    ? newResps
-                    : CreateFallbackResponses();
+                op.Value.Responses = newResps.Any() ? newResps : CreateFallbackResponses();
 
-                // RequestBody
                 var req = op.Value.RequestBody;
                 if (req == null || !IsValidSchemaReference(req.Reference, document))
+                {
                     op.Value.RequestBody = CreateFallbackRequestBody();
+                }
                 else
                 {
                     ScrubBrokenRefs(req.Content, document);
                     if (req.Content != null)
                     {
-                        var empty = req.Content.Keys.Where(k => IsSchemaEmpty(req.Content[k].Schema)).ToList();
+                        var empty = req.Content
+                            .Where(pair => IsMediaEmpty(pair.Value))
+                            .Select(pair => pair.Key).ToList();
                         foreach (var k in empty) req.Content.Remove(k);
                     }
                     if (req.Content == null || !req.Content.Any())
-                        op.Value.RequestBody = CreateFallbackRequestBody();
-                }
-
-                // Parameters (unchanged)
-                if (op.Value.Parameters != null)
-                {
-                    var good = new List<OpenApiParameter>();
-                    foreach (var p in op.Value.Parameters)
                     {
-                        if (!IsValidSchemaReference(p.Reference, document)) continue;
-                        ScrubBrokenRefs(p.Schema, document);
-                        good.Add(p);
+                        op.Value.RequestBody = CreateFallbackRequestBody();
                     }
-                    op.Value.Parameters = good;
                 }
+                // Parameters unchanged
             }
             validPaths.Add(path, item);
         }
@@ -559,17 +551,24 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         }
     }
 
+    private static bool IsMediaEmpty(OpenApiMediaType media)
+    {
+        var schemaEmpty = IsSchemaEmpty(media.Schema);
+        var hasExample = media.Example != null || (media.Examples != null && media.Examples.Any());
+        return schemaEmpty && !hasExample;
+    }
+
     private static bool IsSchemaEmpty(OpenApiSchema schema)
     {
         return schema == null
-            || (string.IsNullOrWhiteSpace(schema.Type)
-            && (schema.Properties == null || schema.Properties.Count == 0)
-            && schema.AllOf.Count == 0
-            && schema.OneOf.Count == 0
-            && schema.AnyOf.Count == 0
-            && schema.Items == null
-            && (schema.Enum == null || schema.Enum.Count == 0)
-            && schema.AdditionalProperties == null
-            && !schema.AdditionalPropertiesAllowed);
+               || (string.IsNullOrWhiteSpace(schema.Type)
+                   && (schema.Properties == null || !schema.Properties.Any())
+                   && !schema.AllOf.Any()
+                   && !schema.OneOf.Any()
+                   && !schema.AnyOf.Any()
+                   && schema.Items == null
+                   && (schema.Enum == null || !schema.Enum.Any())
+                   && schema.AdditionalProperties == null
+                   && !schema.AdditionalPropertiesAllowed);
     }
 }
