@@ -49,6 +49,6 @@
         <PackageReference Include="Soenneker.Managers.Runners" Version="3.0.999" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="3.0.1181" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.24" />
-        <PackageReference Include="Soenneker.Utils.Usings" Version="3.0.12" />
+        <PackageReference Include="Soenneker.Utils.Usings" Version="3.0.13" />
     </ItemGroup>
 </Project>
