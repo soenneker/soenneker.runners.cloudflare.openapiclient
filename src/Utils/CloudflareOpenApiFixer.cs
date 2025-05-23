@@ -75,30 +75,38 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
     private void FixAllInlineValueEnums(OpenApiDocument document)
     {
         var comps = document.Components?.Schemas;
-        if (comps == null)
-            return;
+        if (comps == null) return;
 
-        // We snapshot the keys because we may rewrite Props in the loop
         foreach (var kv in comps.ToList())
         {
+            var key = kv.Key;
             var schema = kv.Value;
-            var parentKey = kv.Key;
+            OpenApiSchema wrapperSegment = null;
 
-            // Only interested in schemas that declare a 'value' property
-            if (schema.Properties == null || !schema.Properties.ContainsKey("value"))
+            // A) inline value property
+            if (schema.Properties?.ContainsKey("value") == true)
+                wrapperSegment = schema;
+            // B) allOf wrapper
+            else if (schema.AllOf?.Count == 2 && schema.AllOf[1].Properties?.ContainsKey("value") == true)
+                wrapperSegment = schema.AllOf[1];
+            else
                 continue;
 
-            // Look for sibling enum component named '<parentKey>_value'
-            var enumKey = $"{parentKey}_value";
-            if (!comps.TryGetValue(enumKey, out var enumSchema))
-                continue;
+            var inline = wrapperSegment.Properties["value"];
+            if (inline.Enum == null || inline.Enum.Count == 0) continue;
 
-            // Confirm it's actually an enum (string type + enum values)
-            if (enumSchema.Enum == null || enumSchema.Enum.Count == 0)
-                continue;
+            var enumKey = $"{key}_value";
+            if (!comps.ContainsKey(enumKey))
+            {
+                comps[enumKey] = new OpenApiSchema
+                {
+                    Type = inline.Type,
+                    Title = enumKey,
+                    Enum = inline.Enum.ToList()
+                };
+            }
 
-            // Replace the inline 'value' object with a $ref to the enum
-            schema.Properties["value"] = new OpenApiSchema
+            wrapperSegment.Properties["value"] = new OpenApiSchema
             {
                 Reference = new OpenApiReference
                 {

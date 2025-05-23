@@ -66,19 +66,48 @@ public class FileOperationsUtil : IFileOperationsUtil
 
         DeleteAllExceptCsproj(srcDirectory);
 
-        await _processUtil.Start("kiota", gitDirectory, $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n {Constants.Library}",
-            waitForExit: true, cancellationToken: cancellationToken).NoSync();
+        await _processUtil.Start("kiota", gitDirectory,
+                              $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n {Constants.Library}", waitForExit: true,
+                              cancellationToken: cancellationToken)
+                          .NoSync();
 
-        // **NEW** post‐process the generated code
         PostProcessKiotaClient(srcDirectory);
+
+        InjectEnumPropertyAndMethods(srcDirectory);
+
+        FixPrimitiveCollectionNullability(srcDirectory);
+
+        FixExpiryDefault(srcDirectory);
+        FixStringListDefaults(srcDirectory);
 
         string projFilePath = Path.Combine(gitDirectory, "src", $"{Constants.Library}.csproj");
 
         await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
 
-        await _usingsUtil.AddMissing(Path.Combine(srcDirectory, Constants.Library + ".csproj"));
+        await _usingsUtil.AddMissing(projFilePath, true, 5, cancellationToken);
 
-        //   await BuildAndPush(gitDirectory, cancellationToken).NoSync();
+        await BuildAndPush(gitDirectory, cancellationToken).NoSync();
+    }
+
+    private void FixStringListDefaults(string srcDirectory)
+    {
+        // Matches: PropertyName = "someValue";
+        // where PropertyName is Headers or ExpectedCodes (add more as needed)
+        var rx = new Regex(@"\b(?<prop>Headers|ExpectedCodes)\s*=\s*""(?<val>[^""]+)""\s*;", RegexOptions.Multiline);
+
+        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            var newText = rx.Replace(text, m =>
+            {
+                var prop = m.Groups["prop"].Value;
+                var val = m.Groups["val"].Value;
+                return $"{prop} = new List<string> {{ \"{val}\" }};";
+            });
+
+            if (newText != text)
+                File.WriteAllText(file, newText);
+        }
     }
 
     public void DeleteAllExceptCsproj(string directoryPath)
@@ -142,8 +171,9 @@ public class FileOperationsUtil : IFileOperationsUtil
         // Regex to fix GetFieldDeserializers entries
         var deserRx = new Regex(@"\{\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*n\s*=>\s*\{\s*(?<name>[0-9]\w*)");
         // Regex to fix all Write*Value calls in Serialize
-        var writeRx = new Regex(@"\bWrite(?:StringValue|BoolValue|NumberValue|CollectionOfPrimitiveValues<[^>]+>|CollectionOfObjectValues<[^>]+>|ObjectValue<[^>]+>)" +
-                                @"\(\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*(?<name>[0-9]\w*)\s*\)");
+        var writeRx = new Regex(
+            @"\bWrite(?:StringValue|BoolValue|NumberValue|CollectionOfPrimitiveValues<[^>]+>|CollectionOfObjectValues<[^>]+>|ObjectValue<[^>]+>)" +
+            @"\(\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*(?<name>[0-9]\w*)\s*\)");
 
         foreach (var file in csFiles)
         {
@@ -151,19 +181,108 @@ public class FileOperationsUtil : IFileOperationsUtil
             var original = text;
 
             // 1) Prefix any public property starting with a digit
-            text = propDeclRx.Replace(text, m =>
-                $"public {m.Groups[1].Value} N{m.Groups[2].Value}");
+            text = propDeclRx.Replace(text, m => $"public {m.Groups[1].Value} N{m.Groups[2].Value}");
 
             // 2) In deserializer, assign into the new name but keep JSON key
-            text = deserRx.Replace(text, m =>
-                $"{{ \"{m.Groups["json"].Value}\", n => {{ N{m.Groups["name"].Value}");
+            text = deserRx.Replace(text, m => $"{{ \"{m.Groups["json"].Value}\", n => {{ N{m.Groups["name"].Value}");
 
             // 3) In Serialize, use new name but still write original JSON key
-            text = writeRx.Replace(text, m =>
-                $"{m.Value.Substring(0, m.Value.IndexOf('(') + 1)}\"{m.Groups["json"].Value}\", N{m.Groups["name"].Value})");
+            text = writeRx.Replace(text, m => $"{m.Value.Substring(0, m.Value.IndexOf('(') + 1)}\"{m.Groups["json"].Value}\", N{m.Groups["name"].Value})");
 
             if (text != original)
                 File.WriteAllText(file, text);
+        }
+    }
+
+
+    private void InjectEnumPropertyAndMethods(string srcDirectory)
+    {
+        // 1) Find all generated .cs files
+        var csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
+
+        // 2) Regex to detect the constructor that assigns the enum defaults
+        var ctorEnumRx = new Regex(
+            @"public\s+(?<cls>\w+)\s*\([^\)]*\)\s*:\s*base\s*\(\)\s*\{\s*(Id\s*=\s*.+;\s*)?Value\s*=\s*(?<enumFull>global::[^\s;]+)\.(?<member>\w+);",
+            RegexOptions.Singleline);
+
+        foreach (var file in csFiles)
+        {
+            var text = File.ReadAllText(file);
+            var ctorMatch = ctorEnumRx.Match(text);
+            if (!ctorMatch.Success)
+                continue;
+
+            // Extract class name, enum full name, and member
+            var className = ctorMatch.Groups["cls"].Value;
+            var enumFull = ctorMatch.Groups["enumFull"].Value; // e.g. global::…Zones_pseudo_ipv4_value
+            var enumType = enumFull.Substring("global::".Length); // e.g. Soenneker.Cloudflare…Zones_pseudo_ipv4_value
+            var member = ctorMatch.Groups["member"].Value; // e.g. Off
+
+            // 3) Rewrite Id assignment from enum to string literal:
+            //    Id = global::…Zones_pseudo_ipv4_id.Pseudo_ipv4;
+            //  → Id = "pseudo_ipv4";
+            text = Regex.Replace(text, @"Id\s*=\s*global::[^\s;]+\.(?<idMember>\w+);", m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
+
+            // 4) Inject the new enum‐typed Value property (nullable) right inside the class body
+            var classBraceRx = new Regex($@"(public\s+partial\s+class\s+{Regex.Escape(className)}\b[^\r\n]*\r?\n\s*\{{\r?\n)", RegexOptions.Multiline);
+            text = classBraceRx.Replace(text, $@"$1        /// <summary>Strongly‐typed enum value</summary>
+        public new {enumType}? Value {{ get; set; }} = {enumFull}.{member};
+
+");
+
+            // 5) Replace the stub GetFieldDeserializers() with one that reads the enum
+            text = Regex.Replace(text,
+                @"public override IDictionary<string, Action<IParseNode>> GetFieldDeserializers\(\)\s*\{\s*return new Dictionary<string, Action<IParseNode>>\(base.GetFieldDeserializers\(\)\)\s*\{\s*\}\s*;\s*\}",
+                $@"public override IDictionary<string, Action<IParseNode>> GetFieldDeserializers()
+        {{
+            var map = new Dictionary<string, Action<IParseNode>>(base.GetFieldDeserializers());
+            map[""value""] = n => {{ Value = n.GetEnumValue<{enumType}>(); }};
+            return map;
+        }}");
+
+            // 6) Patch Serialize() to write out the enum value
+            text = Regex.Replace(text,
+                @"public override void Serialize\(ISerializationWriter writer\)\s*\{\s*_ = writer \?\? throw new ArgumentNullException\(nameof\(writer\)\);\s*base.Serialize\(writer\);\s*\}",
+                $@"public override void Serialize(ISerializationWriter writer)
+        {{
+            _ = writer ?? throw new ArgumentNullException(nameof(writer));
+            base.Serialize(writer);
+            writer.WriteEnumValue<{enumType}>(""value"", Value);
+        }}");
+
+            // 7) Write the modified code back
+            File.WriteAllText(file, text);
+        }
+    }
+
+    /// <summary>
+    /// Replace Expiry = "Now + 30 minutes"; with a real DateTimeOffset.Now.AddMinutes(30)
+    /// </summary>
+    private void FixExpiryDefault(string srcDirectory)
+    {
+        // Matches any Expiry assignment in the parameterless ctor
+        var rx = new Regex(@"Expiry\s*=\s*""[^""]*""\s*;", RegexOptions.Multiline);
+
+        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            var newText = rx.Replace(text, "Expiry = DateTimeOffset.Now.AddMinutes(30);");
+            if (newText != text)
+                File.WriteAllText(file, newText);
+        }
+    }
+
+    private void FixPrimitiveCollectionNullability(string srcDirectory)
+    {
+        var rx = new Regex(@"GetCollectionOfPrimitiveValues<double\?>\(\)\?\.AsList\(\)\s*is\s*List<double>\s*(?<var>\w+)\)", RegexOptions.Singleline);
+
+        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            var newText = rx.Replace(text, m => $"GetCollectionOfPrimitiveValues<double?>()?.AsList() is List<double?> {m.Groups["var"].Value})");
+
+            if (newText != text)
+                File.WriteAllText(file, newText);
         }
     }
 
