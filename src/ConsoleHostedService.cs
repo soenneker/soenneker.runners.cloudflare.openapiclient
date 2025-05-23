@@ -1,12 +1,8 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Soenneker.Managers.Runners.Abstract;
-using Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
-using Soenneker.Utils.File.Download.Abstract;
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 

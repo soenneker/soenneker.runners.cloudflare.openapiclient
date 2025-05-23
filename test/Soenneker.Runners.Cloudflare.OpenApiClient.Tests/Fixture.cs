@@ -2,7 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Soenneker.Fixtures.Unit;
-using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.Test;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Tests;

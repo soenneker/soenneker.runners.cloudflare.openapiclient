@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Interfaces;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
@@ -9,7 +8,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -152,6 +150,63 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         var comps = document.Components?.Schemas;
         if (comps != null)
         {
+            foreach (var key in comps.Keys.ToList())
+            {
+                var schema = comps[key];
+                var isPrimitive = schema.Type is "string" or "integer" or "number" or "boolean";
+                var noCompose = !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any();
+                var noProps = schema.Properties == null || schema.Properties.Count == 0;
+                var noItems = schema.Items == null;
+                var noEnum = schema.Enum == null || schema.Enum.Count == 0;
+                var noExtra = schema.AdditionalProperties == null && !schema.AdditionalPropertiesAllowed;
+
+                if (isPrimitive && noCompose && noProps && noItems && noEnum && noExtra)
+                {
+                    // 1) deep-clone every facet  vendor extensions into a {Key}_Value component
+                    var valueCompId = $"{key}_Value";
+                    var primitiveClone = new OpenApiSchema
+                    {
+                        Type = schema.Type,
+                        Format = schema.Format,
+                        Title = valueCompId,
+                        Description = schema.Description,
+                        Enum = schema.Enum?.ToList(),
+                        Pattern = schema.Pattern,
+                        Minimum = schema.Minimum,
+                        Maximum = schema.Maximum,
+                        MinLength = schema.MinLength,
+                        MaxLength = schema.MaxLength,
+                        Items = schema.Items,
+                        Default = schema.Default,
+                        Nullable = schema.Nullable,
+                        Example = schema.Example,
+                        Xml = schema.Xml,
+                        Extensions = schema.Extensions == null ? null : new Dictionary<string, IOpenApiExtension>(schema.Extensions)
+                    };
+                    AddComponentSchema(document, valueCompId, primitiveClone);
+
+                    // 2) replace the original with a one-prop object wrapper pointing at the clone
+                    comps[key] = new OpenApiSchema
+                    {
+                        Type = "object",
+                        Title = key,
+                        Description = schema.Description,
+                        Properties = new Dictionary<string, OpenApiSchema>
+                        {
+                            ["value"] = new OpenApiSchema
+                            {
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.Schema,
+                                    Id = valueCompId
+                                }
+                            }
+                        },
+                        Required = new HashSet<string> { "value" }
+                    };
+                }
+            }
+
             // Ensure each schema has a Title
             foreach (var kv in comps)
             {
@@ -218,31 +273,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 }
             }
 
-            // Discriminator properties for any existing discriminators
-            // (retained if present in components)
 
-            // Wrap primitives
-            foreach (var key in comps.Keys.ToList())
-            {
-                var schema = comps[key];
-                if ((schema.Type == "string" || schema.Type == "integer" || schema.Type == "number" || schema.Type == "boolean") &&
-                    (schema.Properties == null || !schema.Properties.Any()) && schema.Items == null && !schema.AllOf.Any() && !schema.AnyOf.Any() &&
-                    !schema.OneOf.Any() && (schema.Enum == null || !schema.Enum.Any()) && schema.AdditionalProperties == null)
-                {
-                    // Wrap primitive into an object with required 'value' property to satisfy Kiota
-                    comps[key] = new OpenApiSchema
-                    {
-                        Type = "object",
-                        Title = key,
-                        Description = schema.Description,
-                        Properties = new Dictionary<string, OpenApiSchema>
-                        {
-                            ["value"] = schema
-                        },
-                        Required = new HashSet<string> {"value"}
-                    };
-                }
-            }
         }
 
         // Process paths
@@ -352,6 +383,57 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     // clear any stray required
                     schema.Required = new HashSet<string>();
                 }
+            }
+        }
+
+        // after all existing normalization logic, just before returning:
+        foreach (var key in comps.Keys.ToList())
+        {
+            var s = comps[key];
+            if ((s.Type is "string" or "integer" or "number" or "boolean") && (s.Properties == null || s.Properties.Count == 0) && s.Items == null &&
+                !s.AllOf.Any() && !s.AnyOf.Any() && !s.OneOf.Any())
+            {
+                Console.WriteLine($"Final wrap of: {key}");
+                var cloneId = $"{key}_Value";
+                var clone = new OpenApiSchema
+                {
+                    Type = s.Type,
+                    Format = s.Format,
+                    Title = cloneId,
+                    Description = s.Description,
+                    Enum = s.Enum?.ToList(),
+                    Pattern = s.Pattern,
+                    Minimum = s.Minimum,
+                    Maximum = s.Maximum,
+                    MinLength = s.MinLength,
+                    MaxLength = s.MaxLength,
+                    Items = s.Items,
+                    Default = s.Default,
+                    Nullable = s.Nullable,
+                    Example = s.Example,
+                    Xml = s.Xml,
+                    Extensions = s.Extensions == null ? null : new Dictionary<string, IOpenApiExtension>(s.Extensions)
+                };
+                AddComponentSchema(document, cloneId, clone);
+
+                comps[key] = new OpenApiSchema
+                {
+                    Type = "object",
+                    Title = key,
+                    Description = s.Description,
+                    Properties = new Dictionary<string, OpenApiSchema>
+                    {
+                        ["value"] = new OpenApiSchema
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.Schema,
+                                Id = cloneId
+                            }
+                        }
+                    },
+                    Required = new HashSet<string> {"value"}
+                };
             }
         }
     }

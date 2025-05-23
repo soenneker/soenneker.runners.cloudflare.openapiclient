@@ -8,10 +8,8 @@ using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Download.Abstract;
 using Soenneker.Utils.FileSync.Abstract;
 using Soenneker.Utils.Process.Abstract;
-using Soenneker.Utils.Usings;
 using Soenneker.Utils.Usings.Abstract;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -72,7 +70,7 @@ public class FileOperationsUtil : IFileOperationsUtil
                           .NoSync();
 
         PostProcessKiotaClient(srcDirectory);
-
+        FixEnumIdToString(srcDirectory);
         InjectEnumPropertyAndMethods(srcDirectory);
 
         FixPrimitiveCollectionNullability(srcDirectory);
@@ -85,6 +83,8 @@ public class FileOperationsUtil : IFileOperationsUtil
         await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
 
         await _usingsUtil.AddMissing(projFilePath, true, 5, cancellationToken);
+
+        // bool successful = await _dotnetUtil.Build(projFilePath, true, "Release", false, cancellationToken: cancellationToken);
 
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
     }
@@ -194,6 +194,17 @@ public class FileOperationsUtil : IFileOperationsUtil
         }
     }
 
+    private void FixEnumIdToString(string srcDirectory)
+    {
+        var rx = new Regex(@"Id\s*=\s*global::[A-Za-z0-9_.]+?\.(?<idMember>\w+);", RegexOptions.Multiline);
+        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            var replaced = rx.Replace(text, m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
+            if (replaced != text)
+                File.WriteAllText(file, replaced);
+        }
+    }
 
     private void InjectEnumPropertyAndMethods(string srcDirectory)
     {
