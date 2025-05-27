@@ -312,7 +312,7 @@ public class FileOperationsUtil : IFileOperationsUtil
             return;
         }
 
-        string gitHubToken = EnvironmentUtil.GetVariableStrict("GH_TOKEN");
+        string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
 
         await _gitUtil.CommitAndPush(gitDirectory, "soenneker", "Jake Soenneker", "jake@soenneker.com", gitHubToken, "Automated update");
     }
