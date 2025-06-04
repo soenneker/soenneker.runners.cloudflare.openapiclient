@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Soenneker.Utils.Delay;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient;
 
@@ -47,7 +48,7 @@ public class ConsoleHostedService : IHostedService
 
                     _logger.LogError(e, "Unhandled exception");
 
-                    await Task.Delay(2000, cancellationToken);
+                    await DelayUtil.Delay(2000, _logger, cancellationToken);
                     _exitCode = 1;
                 }
                 finally

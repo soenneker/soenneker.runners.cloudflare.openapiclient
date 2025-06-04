@@ -19,7 +19,7 @@ using System.Threading.Tasks;
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 
 ///<inheritdoc cref="IFileOperationsUtil"/>
-public class FileOperationsUtil : IFileOperationsUtil
+public sealed class FileOperationsUtil : IFileOperationsUtil
 {
     private readonly ILogger<FileOperationsUtil> _logger;
     private readonly IGitUtil _gitUtil;
@@ -95,13 +95,13 @@ public class FileOperationsUtil : IFileOperationsUtil
         // where PropertyName is Headers or ExpectedCodes (add more as needed)
         var rx = new Regex(@"\b(?<prop>Headers|ExpectedCodes)\s*=\s*""(?<val>[^""]+)""\s*;", RegexOptions.Multiline);
 
-        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var text = File.ReadAllText(file);
-            var newText = rx.Replace(text, m =>
+            string text = File.ReadAllText(file);
+            string newText = rx.Replace(text, m =>
             {
-                var prop = m.Groups["prop"].Value;
-                var val = m.Groups["val"].Value;
+                string prop = m.Groups["prop"].Value;
+                string val = m.Groups["val"].Value;
                 return $"{prop} = new List<string> {{ \"{val}\" }};";
             });
 
@@ -162,9 +162,9 @@ public class FileOperationsUtil : IFileOperationsUtil
     }
 
     // call this right after kiota generate
-    private void PostProcessKiotaClient(string srcDirectory)
+    private static void PostProcessKiotaClient(string srcDirectory)
     {
-        var csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
+        string[] csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
 
         // Regex to find properties whose name starts with a digit
         var propDeclRx = new Regex(@"public\s+([\w<>,\?\[\]]+)\s+([0-9]\w*)");
@@ -175,10 +175,10 @@ public class FileOperationsUtil : IFileOperationsUtil
             @"\bWrite(?:StringValue|BoolValue|NumberValue|CollectionOfPrimitiveValues<[^>]+>|CollectionOfObjectValues<[^>]+>|ObjectValue<[^>]+>)" +
             @"\(\s*""(?<json>_[A-Za-z0-9_]+)""\s*,\s*(?<name>[0-9]\w*)\s*\)");
 
-        foreach (var file in csFiles)
+        foreach (string file in csFiles)
         {
-            var text = File.ReadAllText(file);
-            var original = text;
+            string text = File.ReadAllText(file);
+            string original = text;
 
             // 1) Prefix any public property starting with a digit
             text = propDeclRx.Replace(text, m => $"public {m.Groups[1].Value} N{m.Groups[2].Value}");
@@ -197,10 +197,10 @@ public class FileOperationsUtil : IFileOperationsUtil
     private void FixEnumIdToString(string srcDirectory)
     {
         var rx = new Regex(@"Id\s*=\s*global::[A-Za-z0-9_.]+?\.(?<idMember>\w+);", RegexOptions.Multiline);
-        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var text = File.ReadAllText(file);
-            var replaced = rx.Replace(text, m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
+            string text = File.ReadAllText(file);
+            string replaced = rx.Replace(text, m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
             if (replaced != text)
                 File.WriteAllText(file, replaced);
         }
@@ -209,25 +209,25 @@ public class FileOperationsUtil : IFileOperationsUtil
     private void InjectEnumPropertyAndMethods(string srcDirectory)
     {
         // 1) Find all generated .cs files
-        var csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
+        string[] csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
 
         // 2) Regex to detect the constructor that assigns the enum defaults
         var ctorEnumRx = new Regex(
             @"public\s+(?<cls>\w+)\s*\([^\)]*\)\s*:\s*base\s*\(\)\s*\{\s*(Id\s*=\s*.+;\s*)?Value\s*=\s*(?<enumFull>global::[^\s;]+)\.(?<member>\w+);",
             RegexOptions.Singleline);
 
-        foreach (var file in csFiles)
+        foreach (string file in csFiles)
         {
-            var text = File.ReadAllText(file);
-            var ctorMatch = ctorEnumRx.Match(text);
+            string text = File.ReadAllText(file);
+            Match ctorMatch = ctorEnumRx.Match(text);
             if (!ctorMatch.Success)
                 continue;
 
             // Extract class name, enum full name, and member
-            var className = ctorMatch.Groups["cls"].Value;
-            var enumFull = ctorMatch.Groups["enumFull"].Value; // e.g. global::…Zones_pseudo_ipv4_value
-            var enumType = enumFull.Substring("global::".Length); // e.g. Soenneker.Cloudflare…Zones_pseudo_ipv4_value
-            var member = ctorMatch.Groups["member"].Value; // e.g. Off
+            string className = ctorMatch.Groups["cls"].Value;
+            string enumFull = ctorMatch.Groups["enumFull"].Value; // e.g. global::…Zones_pseudo_ipv4_value
+            string enumType = enumFull.Substring("global::".Length); // e.g. Soenneker.Cloudflare…Zones_pseudo_ipv4_value
+            string member = ctorMatch.Groups["member"].Value; // e.g. Off
 
             // 3) Rewrite Id assignment from enum to string literal:
             //    Id = global::…Zones_pseudo_ipv4_id.Pseudo_ipv4;
@@ -274,10 +274,10 @@ public class FileOperationsUtil : IFileOperationsUtil
         // Matches any Expiry assignment in the parameterless ctor
         var rx = new Regex(@"Expiry\s*=\s*""[^""]*""\s*;", RegexOptions.Multiline);
 
-        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var text = File.ReadAllText(file);
-            var newText = rx.Replace(text, "Expiry = DateTimeOffset.Now.AddMinutes(30);");
+            string text = File.ReadAllText(file);
+            string newText = rx.Replace(text, "Expiry = DateTimeOffset.Now.AddMinutes(30);");
             if (newText != text)
                 File.WriteAllText(file, newText);
         }
@@ -287,10 +287,10 @@ public class FileOperationsUtil : IFileOperationsUtil
     {
         var rx = new Regex(@"GetCollectionOfPrimitiveValues<double\?>\(\)\?\.AsList\(\)\s*is\s*List<double>\s*(?<var>\w+)\)", RegexOptions.Singleline);
 
-        foreach (var file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            var text = File.ReadAllText(file);
-            var newText = rx.Replace(text, m => $"GetCollectionOfPrimitiveValues<double?>()?.AsList() is List<double?> {m.Groups["var"].Value})");
+            string text = File.ReadAllText(file);
+            string newText = rx.Replace(text, m => $"GetCollectionOfPrimitiveValues<double?>()?.AsList() is List<double?> {m.Groups["var"].Value})");
 
             if (newText != text)
                 File.WriteAllText(file, newText);
