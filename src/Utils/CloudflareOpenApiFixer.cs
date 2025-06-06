@@ -107,7 +107,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 Pattern = primitiveSchema.Pattern,
                 Minimum = primitiveSchema.Minimum,
                 Maximum = primitiveSchema.Maximum,
-                // (copy any other constraints you need)
+                // (copy any other primitive constraints you need)
             };
 
             // We use this HashSet to avoid revisiting the same OpenApiSchema node multiple times
@@ -136,7 +136,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     schema.Pattern = inlineSchema.Pattern;
                     schema.Minimum = inlineSchema.Minimum;
                     schema.Maximum = inlineSchema.Maximum;
-                    // No further recursion here, because once it’s inlined, there’s nowhere else to go
+                    // No further recursion needed here
                     return;
                 }
 
@@ -152,7 +152,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     return;
                 }
 
-                // 3) Otherwise, “normal” schema node: descend into anyOf/allOf/oneOf → Properties → Items → AdditionalProperties
+                // 3) Otherwise, descend into children (anyOf/allOf/OneOf → Properties → Items → AdditionalProperties)
                 if (schema.AllOf != null)
                     foreach (var child in schema.AllOf)
                         ReplaceRef(child);
@@ -176,25 +176,32 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     ReplaceRef(schema.AdditionalProperties);
             }
 
-            // Walk every Component RequestBody → Content → schema
+            // —— NEW: Walk every component schema itself first. 
+            //          That way, references buried inside other component definitions get inlined:
+            foreach (var componentSchema in comps.Values.ToList())
+            {
+                ReplaceRef(componentSchema);
+            }
+
+            // 2a) Walk through Component RequestBody → Content → schema
             foreach (var rb in document.Components.RequestBodies.Values)
                 foreach (var mt in rb.Content.Values)
                     ReplaceRef(mt.Schema);
 
-            // Walk every Component Response → Content → schema
+            // 2b) Walk through Component Response → Content → schema
             foreach (var resp in document.Components.Responses.Values)
                 foreach (var mt in resp.Content.Values)
                     ReplaceRef(mt.Schema);
 
-            // Walk every Component Parameter → schema
+            // 2c) Walk through Component Parameter → schema
             foreach (var param in document.Components.Parameters.Values)
                 ReplaceRef(param.Schema);
 
-            // Walk every Component Header → schema
+            // 2d) Walk through Component Header → schema
             foreach (var header in document.Components.Headers.Values)
                 ReplaceRef(header.Schema);
 
-            // Walk all Paths → Operations → (Parameters → schema), (RequestBody → Content → schema), (Responses → Content → schema)
+            // 3) Walk all Paths → Operations → (Parameters → schema), (RequestBody → Content → schema), (Responses → Content → schema)
             foreach (var pathItem in document.Paths.Values)
             {
                 foreach (var op in pathItem.Operations.Values)
@@ -226,6 +233,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             comps.Remove(primKey);
         }
     }
+
 
 
     /// <summary>
