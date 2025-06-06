@@ -7,9 +7,9 @@ using Xunit;
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Tests;
 
 [Collection("Collection")]
-public class CloudflareOpenApiClientTests : FixturedUnitTest
+public class CloudflareOpenApiFixerTests : FixturedUnitTest
 {
-    public CloudflareOpenApiClientTests(Fixture fixture, ITestOutputHelper output) : base(fixture, output)
+    public CloudflareOpenApiFixerTests(Fixture fixture, ITestOutputHelper output) : base(fixture, output)
     {
     }
 
@@ -22,7 +22,7 @@ public class CloudflareOpenApiClientTests : FixturedUnitTest
     [LocalFact]
     public async ValueTask Fix()
     { 
-        var cloudflareOpenApiFixer = Resolve<ICloudflareOpenApiFixer>();
+        var cloudflareOpenApiFixer = Resolve<ICloudflareOpenApiFixer>(true);
 
         await cloudflareOpenApiFixer.Fix("c:\\cloudflare\\input.json", "c:\\cloudflare\\fixed.json");
     }

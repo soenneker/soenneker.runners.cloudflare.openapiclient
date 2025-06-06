@@ -39,12 +39,12 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
             RenameConflictingPaths(document);
             RenameInvalidComponentSchemas(document);
+            InlinePrimitiveComponents(document);
             ApplySchemaNormalizations(document, cancellationToken);
             ScrubComponentRefs(document, cancellationToken);
             ExtractInlineSchemas(document, cancellationToken);
 
             FixAllInlineValueEnums(document);
-            InlinePrimitiveComponents(document);
 
             await using var outFs = new FileStream(targetFilePath, FileMode.Create);
             await using var tw = new StreamWriter(outFs);
@@ -92,13 +92,11 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         if (!primitives.Any())
             return;
 
-        // 2) For each primitive‐only component, walk every part of the document and replace references
         foreach (string primKey in primitives)
         {
-            // Grab the schema node once:
             var primitiveSchema = comps[primKey];
 
-            // Create a clone to inline—so we don't accidentally modify the component later
+            // Make a shallow “inline” copy of the primitive’s constraints
             var inlineSchema = new OpenApiSchema
             {
                 Type = primitiveSchema.Type,
@@ -106,83 +104,113 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 Description = primitiveSchema.Description,
                 Example = primitiveSchema.Example,
                 MaxLength = primitiveSchema.MaxLength,
+                Pattern = primitiveSchema.Pattern,
+                Minimum = primitiveSchema.Minimum,
+                Maximum = primitiveSchema.Maximum,
                 // (copy any other constraints you need)
             };
 
-            // Helper that replaces a Reference‐type schema with inlineSchema if the Id matches
+            // We use this HashSet to avoid revisiting the same OpenApiSchema node multiple times
+            var visited = new HashSet<OpenApiSchema>();
+
             void ReplaceRef(OpenApiSchema? schema)
             {
-                if (schema == null) return;
-                if (schema.Reference != null && schema.Reference.Type == ReferenceType.Schema && schema.Reference.Id == primKey)
+                if (schema == null)
+                    return;
+
+                // If we’ve already been here, bail out immediately
+                if (!visited.Add(schema))
+                    return;
+
+                // 1) If this node is a $ref pointing at primKey, inline it
+                if (schema.Reference != null
+                    && schema.Reference.Type == ReferenceType.Schema
+                    && schema.Reference.Id == primKey)
                 {
-                    // remove the reference entirely, and copy over inlineSchema fields
                     schema.Reference = null;
                     schema.Type = inlineSchema.Type;
                     schema.Format = inlineSchema.Format;
                     schema.Description = inlineSchema.Description;
                     schema.Example = inlineSchema.Example;
                     schema.MaxLength = inlineSchema.MaxLength;
-                    // leave any existing Properties/OneOf/etc alone (they should be null for a primitive)
-                    // you could also copy over other constraints like Minimum, Maximum, Pattern, etc.
+                    schema.Pattern = inlineSchema.Pattern;
+                    schema.Minimum = inlineSchema.Minimum;
+                    schema.Maximum = inlineSchema.Maximum;
+                    // No further recursion here, because once it’s inlined, there’s nowhere else to go
+                    return;
                 }
 
-                // dive deeper in anyOf/oneOf/allOf
-                if (schema.AllOf != null)
-                    foreach (var c in schema.AllOf) ReplaceRef(c);
-                if (schema.OneOf != null)
-                    foreach (var c in schema.OneOf) ReplaceRef(c);
-                if (schema.AnyOf != null)
-                    foreach (var c in schema.AnyOf) ReplaceRef(c);
+                // 2) If it’s a $ref to some OTHER component, fetch that component’s schema and recurse
+                if (schema.Reference != null
+                    && schema.Reference.Type == ReferenceType.Schema)
+                {
+                    var targetId = schema.Reference.Id;
+                    if (document.Components.Schemas.TryGetValue(targetId, out var targetSchema))
+                    {
+                        ReplaceRef(targetSchema);
+                    }
+                    return;
+                }
 
-                // properties
+                // 3) Otherwise, “normal” schema node: descend into anyOf/allOf/oneOf → Properties → Items → AdditionalProperties
+                if (schema.AllOf != null)
+                    foreach (var child in schema.AllOf)
+                        ReplaceRef(child);
+
+                if (schema.OneOf != null)
+                    foreach (var child in schema.OneOf)
+                        ReplaceRef(child);
+
+                if (schema.AnyOf != null)
+                    foreach (var child in schema.AnyOf)
+                        ReplaceRef(child);
+
                 if (schema.Properties != null)
                     foreach (var prop in schema.Properties.Values)
                         ReplaceRef(prop);
 
-                // items (for arrays)
                 if (schema.Items != null)
                     ReplaceRef(schema.Items);
 
-                // additionalProperties
                 if (schema.AdditionalProperties != null)
                     ReplaceRef(schema.AdditionalProperties);
             }
 
-            // 2a) Walk through Components.RequestBodies, Responses, Parameters, Headers:
+            // Walk every Component RequestBody → Content → schema
             foreach (var rb in document.Components.RequestBodies.Values)
                 foreach (var mt in rb.Content.Values)
                     ReplaceRef(mt.Schema);
 
+            // Walk every Component Response → Content → schema
             foreach (var resp in document.Components.Responses.Values)
                 foreach (var mt in resp.Content.Values)
                     ReplaceRef(mt.Schema);
 
+            // Walk every Component Parameter → schema
             foreach (var param in document.Components.Parameters.Values)
                 ReplaceRef(param.Schema);
 
+            // Walk every Component Header → schema
             foreach (var header in document.Components.Headers.Values)
                 ReplaceRef(header.Schema);
 
-            // 2b) Walk through all Paths → Operations → Parameters / RequestBody / Responses:
+            // Walk all Paths → Operations → (Parameters → schema), (RequestBody → Content → schema), (Responses → Content → schema)
             foreach (var pathItem in document.Paths.Values)
             {
                 foreach (var op in pathItem.Operations.Values)
                 {
-                    // parameters
                     if (op.Parameters != null)
                     {
                         foreach (var p in op.Parameters)
                             ReplaceRef(p.Schema);
                     }
 
-                    // request body
                     if (op.RequestBody?.Content != null)
                     {
                         foreach (var mt in op.RequestBody.Content.Values)
                             ReplaceRef(mt.Schema);
                     }
 
-                    // responses
                     foreach (var resp in op.Responses.Values)
                     {
                         if (resp.Content != null)
@@ -194,7 +222,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 }
             }
 
-            // 3) Finally remove the component itself
+            // Having inlined every reference to primKey, we can safely remove it from Components.Schemas
             comps.Remove(primKey);
         }
     }
