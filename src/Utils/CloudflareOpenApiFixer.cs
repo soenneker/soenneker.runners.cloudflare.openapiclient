@@ -151,64 +151,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         IDictionary<string, OpenApiSchema>? comps = document.Components?.Schemas;
         if (comps != null)
         {
-            foreach (string key in comps.Keys.ToList())
-            {
-                OpenApiSchema schema = comps[key];
-
-                bool isPrimitive = schema.Type is "string" or "integer" or "number" or "boolean";
-                bool noCompose = !schema.AllOf.Any() && !schema.AnyOf.Any() && !schema.OneOf.Any();
-                bool noProps = schema.Properties == null || schema.Properties.Count == 0;
-                bool noItems = schema.Items == null;
-                bool noEnum = schema.Enum == null || schema.Enum.Count == 0;
-                bool noExtra = schema.AdditionalProperties == null && !schema.AdditionalPropertiesAllowed;
-
-                if (isPrimitive && noCompose && noProps && noItems && noEnum && noExtra)
-                {
-                    // 1) deep-clone every facet  vendor extensions into a {Key}_Value component
-                    var valueCompId = $"{key}_Value";
-                    var primitiveClone = new OpenApiSchema
-                    {
-                        Type = schema.Type,
-                        Format = schema.Format,
-                        Title = valueCompId,
-                        Description = schema.Description,
-                        Enum = schema.Enum?.ToList(),
-                        Pattern = schema.Pattern,
-                        Minimum = schema.Minimum,
-                        Maximum = schema.Maximum,
-                        MinLength = schema.MinLength,
-                        MaxLength = schema.MaxLength,
-                        Items = schema.Items,
-                        Default = schema.Default,
-                        Nullable = schema.Nullable,
-                        Example = schema.Example,
-                        Xml = schema.Xml,
-                        Extensions = schema.Extensions == null ? null : new Dictionary<string, IOpenApiExtension>(schema.Extensions)
-                    };
-                    AddComponentSchema(document, valueCompId, primitiveClone);
-
-                    // 2) replace the original with a one-prop object wrapper pointing at the clone
-                    comps[key] = new OpenApiSchema
-                    {
-                        Type = "object",
-                        Title = key,
-                        Description = schema.Description,
-                        Properties = new Dictionary<string, OpenApiSchema>
-                        {
-                            ["value"] = new OpenApiSchema
-                            {
-                                Reference = new OpenApiReference
-                                {
-                                    Type = ReferenceType.Schema,
-                                    Id = valueCompId
-                                }
-                            }
-                        },
-                        Required = new HashSet<string> {"value"}
-                    };
-                }
-            }
-
             // Ensure each schema has a Title
             foreach (KeyValuePair<string, OpenApiSchema> kv in comps)
             {
