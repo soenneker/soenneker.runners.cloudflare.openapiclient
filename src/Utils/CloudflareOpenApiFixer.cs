@@ -44,6 +44,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             ExtractInlineSchemas(document, cancellationToken);
 
             FixAllInlineValueEnums(document);
+            InlinePrimitiveComponents(document);
 
             await using var outFs = new FileStream(targetFilePath, FileMode.Create);
             await using var tw = new StreamWriter(outFs);
@@ -64,6 +65,140 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             throw;
         }
     }
+
+    private void InlinePrimitiveComponents(OpenApiDocument document)
+    {
+        if (document.Components?.Schemas is not IDictionary<string, OpenApiSchema> comps)
+            return;
+
+        // 1) Find all schemas that are pure primitives (string/int/boolean/number) with no props/enum/oneOf/etc.
+        var primitives = comps
+            .Where(kv =>
+                !string.IsNullOrWhiteSpace(kv.Value.Type)
+                && (kv.Value.Type == "string"
+                    || kv.Value.Type == "integer"
+                    || kv.Value.Type == "boolean"
+                    || kv.Value.Type == "number")
+                && (kv.Value.Properties == null || kv.Value.Properties.Count == 0)
+                && (kv.Value.Enum == null || kv.Value.Enum.Count == 0)
+                && (kv.Value.OneOf == null || kv.Value.OneOf.Count == 0)
+                && (kv.Value.AnyOf == null || kv.Value.AnyOf.Count == 0)
+                && (kv.Value.AllOf == null || kv.Value.AllOf.Count == 0)
+                && kv.Value.Items == null
+            )
+            .Select(kv => kv.Key)
+            .ToList();
+
+        if (!primitives.Any())
+            return;
+
+        // 2) For each primitive‐only component, walk every part of the document and replace references
+        foreach (string primKey in primitives)
+        {
+            // Grab the schema node once:
+            var primitiveSchema = comps[primKey];
+
+            // Create a clone to inline—so we don't accidentally modify the component later
+            var inlineSchema = new OpenApiSchema
+            {
+                Type = primitiveSchema.Type,
+                Format = primitiveSchema.Format,
+                Description = primitiveSchema.Description,
+                Example = primitiveSchema.Example,
+                MaxLength = primitiveSchema.MaxLength,
+                // (copy any other constraints you need)
+            };
+
+            // Helper that replaces a Reference‐type schema with inlineSchema if the Id matches
+            void ReplaceRef(OpenApiSchema? schema)
+            {
+                if (schema == null) return;
+                if (schema.Reference != null && schema.Reference.Type == ReferenceType.Schema && schema.Reference.Id == primKey)
+                {
+                    // remove the reference entirely, and copy over inlineSchema fields
+                    schema.Reference = null;
+                    schema.Type = inlineSchema.Type;
+                    schema.Format = inlineSchema.Format;
+                    schema.Description = inlineSchema.Description;
+                    schema.Example = inlineSchema.Example;
+                    schema.MaxLength = inlineSchema.MaxLength;
+                    // leave any existing Properties/OneOf/etc alone (they should be null for a primitive)
+                    // you could also copy over other constraints like Minimum, Maximum, Pattern, etc.
+                }
+
+                // dive deeper in anyOf/oneOf/allOf
+                if (schema.AllOf != null)
+                    foreach (var c in schema.AllOf) ReplaceRef(c);
+                if (schema.OneOf != null)
+                    foreach (var c in schema.OneOf) ReplaceRef(c);
+                if (schema.AnyOf != null)
+                    foreach (var c in schema.AnyOf) ReplaceRef(c);
+
+                // properties
+                if (schema.Properties != null)
+                    foreach (var prop in schema.Properties.Values)
+                        ReplaceRef(prop);
+
+                // items (for arrays)
+                if (schema.Items != null)
+                    ReplaceRef(schema.Items);
+
+                // additionalProperties
+                if (schema.AdditionalProperties != null)
+                    ReplaceRef(schema.AdditionalProperties);
+            }
+
+            // 2a) Walk through Components.RequestBodies, Responses, Parameters, Headers:
+            foreach (var rb in document.Components.RequestBodies.Values)
+                foreach (var mt in rb.Content.Values)
+                    ReplaceRef(mt.Schema);
+
+            foreach (var resp in document.Components.Responses.Values)
+                foreach (var mt in resp.Content.Values)
+                    ReplaceRef(mt.Schema);
+
+            foreach (var param in document.Components.Parameters.Values)
+                ReplaceRef(param.Schema);
+
+            foreach (var header in document.Components.Headers.Values)
+                ReplaceRef(header.Schema);
+
+            // 2b) Walk through all Paths → Operations → Parameters / RequestBody / Responses:
+            foreach (var pathItem in document.Paths.Values)
+            {
+                foreach (var op in pathItem.Operations.Values)
+                {
+                    // parameters
+                    if (op.Parameters != null)
+                    {
+                        foreach (var p in op.Parameters)
+                            ReplaceRef(p.Schema);
+                    }
+
+                    // request body
+                    if (op.RequestBody?.Content != null)
+                    {
+                        foreach (var mt in op.RequestBody.Content.Values)
+                            ReplaceRef(mt.Schema);
+                    }
+
+                    // responses
+                    foreach (var resp in op.Responses.Values)
+                    {
+                        if (resp.Content != null)
+                        {
+                            foreach (var mt in resp.Content.Values)
+                                ReplaceRef(mt.Schema);
+                        }
+                    }
+                }
+            }
+
+            // 3) Finally remove the component itself
+            comps.Remove(primKey);
+        }
+    }
+
 
     /// <summary>
     /// For every component schema that has an inline 'value' object,
@@ -365,57 +500,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     // clear any stray required
                     schema.Required = new HashSet<string>();
                 }
-            }
-        }
-
-        // after all existing normalization logic, just before returning:
-        foreach (string key in comps.Keys.ToList())
-        {
-            OpenApiSchema s = comps[key];
-            if ((s.Type is "string" or "integer" or "number" or "boolean") && (s.Properties == null || s.Properties.Count == 0) && s.Items == null &&
-                !s.AllOf.Any() && !s.AnyOf.Any() && !s.OneOf.Any())
-            {
-                Console.WriteLine($"Final wrap of: {key}");
-                var cloneId = $"{key}_Value";
-                var clone = new OpenApiSchema
-                {
-                    Type = s.Type,
-                    Format = s.Format,
-                    Title = cloneId,
-                    Description = s.Description,
-                    Enum = s.Enum?.ToList(),
-                    Pattern = s.Pattern,
-                    Minimum = s.Minimum,
-                    Maximum = s.Maximum,
-                    MinLength = s.MinLength,
-                    MaxLength = s.MaxLength,
-                    Items = s.Items,
-                    Default = s.Default,
-                    Nullable = s.Nullable,
-                    Example = s.Example,
-                    Xml = s.Xml,
-                    Extensions = s.Extensions == null ? null : new Dictionary<string, IOpenApiExtension>(s.Extensions)
-                };
-                AddComponentSchema(document, cloneId, clone);
-
-                comps[key] = new OpenApiSchema
-                {
-                    Type = "object",
-                    Title = key,
-                    Description = s.Description,
-                    Properties = new Dictionary<string, OpenApiSchema>
-                    {
-                        ["value"] = new OpenApiSchema
-                        {
-                            Reference = new OpenApiReference
-                            {
-                                Type = ReferenceType.Schema,
-                                Id = cloneId
-                            }
-                        }
-                    },
-                    Required = new HashSet<string> {"value"}
-                };
             }
         }
     }
