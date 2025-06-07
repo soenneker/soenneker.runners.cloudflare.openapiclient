@@ -52,7 +52,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 throw new InvalidDataException("The OpenAPI document could not be parsed into a valid object model.");
             }
 
-            SanitizeAllExamples(document);
+          //  SanitizeAllExamples(document);
 
             EnsureSecuritySchemes(document);
 
@@ -152,6 +152,88 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             FixAllInlineValueEnums(document);
             StripAllDiscriminators(document);
 
+            NukeAllExamples(document);
+
+            if (document.Components?.Schemas != null)
+            {
+                foreach (var kvp in document.Components.Schemas.ToList())
+                {
+                    var compName = kvp.Key;
+                    var schema = kvp.Value;
+
+                    // 1) Ensure title
+                    if (string.IsNullOrWhiteSpace(schema.Title))
+                        schema.Title = compName;
+
+                    // 2) Rename any empty property keys
+                    if (schema.Properties != null && schema.Properties.ContainsKey(""))
+                    {
+                        var fixedProps = new Dictionary<string, OpenApiSchema>();
+                        foreach (var prop in schema.Properties)
+                        {
+                            var name = string.IsNullOrWhiteSpace(prop.Key)
+                                ? $"prop_{Guid.NewGuid():N}"
+                                : prop.Key;
+                            fixedProps[name] = prop.Value;
+                        }
+                        schema.Properties = fixedProps;
+                    }
+                }
+            }
+
+            void CleanEmptyKeysOn<T>(IDictionary<string, T> dict, string dictName)
+            {
+                if (dict == null) return;
+                foreach (var key in dict.Keys.ToList())
+                {
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        _logger.LogWarning("Dropping empty key from " + dictName);
+                        dict.Remove(key);
+                    }
+                }
+            }
+
+            // 1) Paths
+            CleanEmptyKeysOn(document.Paths, "paths");
+
+            // 2) Component maps
+            if (document.Components != null)
+            {
+                CleanEmptyKeysOn(document.Components.Schemas, "components.schemas");
+                CleanEmptyKeysOn(document.Components.Parameters, "components.parameters");
+                CleanEmptyKeysOn(document.Components.RequestBodies, "components.requestBodies");
+                CleanEmptyKeysOn(document.Components.Responses, "components.responses");
+                CleanEmptyKeysOn(document.Components.Headers, "components.headers");
+                CleanEmptyKeysOn(document.Components.SecuritySchemes, "components.securitySchemes");
+
+                // 2a) Inside each requestBody/responseBody, strip empty media‐types
+                foreach (var rb in document.Components.RequestBodies.Values)
+                    CleanEmptyKeysOn(rb.Content, $"requestBodies.{rb.Reference?.Id}.content");
+                foreach (var resp in document.Components.Responses.Values)
+                    CleanEmptyKeysOn(resp.Content, $"responses.{resp.Reference?.Id}.content");
+            }
+
+            // 3) Operations
+            foreach (var pathItem in document.Paths.Values)
+            {
+                foreach (var op in pathItem.Operations.Values)
+                {
+                    // 3a) Responses
+                    CleanEmptyKeysOn(op.Responses, $"operation {op.OperationId}.responses");
+                    foreach (var resp in op.Responses.Values)
+                        CleanEmptyKeysOn(resp.Content, $"operation {op.OperationId}.responses.content");
+
+                    // 3b) RequestBody media types
+                    if (op.RequestBody?.Content != null)
+                        CleanEmptyKeysOn(op.RequestBody.Content, $"operation {op.OperationId}.requestBody.content");
+
+                    // 3c) Parameters themselves are already Name-validated, but just in case:
+                    var goodParams = op.Parameters?.Where(p => !string.IsNullOrWhiteSpace(p.Name)).ToList();
+                    if (goodParams != null) op.Parameters = goodParams;
+                }
+            }
+
             await using var outFs = new FileStream(targetFilePath, FileMode.Create);
             await using var tw = new StreamWriter(outFs);
             var jw = new Microsoft.OpenApi.Writers.OpenApiJsonWriter(tw);
@@ -173,6 +255,95 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         }
 
         await ReadAndValidateOpenApi(targetFilePath);
+    }
+
+    /// <summary>
+    /// Performs a definitive and final erasure of all 'example' and 'examples' properties
+    /// from the entire OpenAPI document. This method directly targets and iterates through
+    /// every known collection that can contain examples, nullifying them at the source.
+    /// This is the most direct and reliable approach for this complex document.
+    /// </summary>
+    /// <param name="document">The OpenAPI document to sanitize.</param>
+    private void NukeAllExamples(OpenApiDocument document)
+    {
+        _logger.LogInformation("--- Starting FINAL, BRUTE-FORCE ERASURE of all examples ---");
+
+        // Use a HashSet to track which schemas have already been nuked to prevent infinite loops.
+        var visitedSchemas = new HashSet<OpenApiSchema>();
+
+        // Recursive helper specifically for schemas, which can be deeply nested.
+        void NukeSchema(OpenApiSchema? schema)
+        {
+            if (schema == null || !visitedSchemas.Add(schema))
+            {
+                return;
+            }
+
+            schema.Example = null;
+
+            if (schema.Items != null) NukeSchema(schema.Items);
+            if (schema.AdditionalProperties != null) NukeSchema(schema.AdditionalProperties);
+            if (schema.Properties != null) foreach (var p in schema.Properties.Values) NukeSchema(p);
+            if (schema.AllOf != null) foreach (var s in schema.AllOf) NukeSchema(s);
+            if (schema.AnyOf != null) foreach (var s in schema.AnyOf) NukeSchema(s);
+            if (schema.OneOf != null) foreach (var s in schema.OneOf) NukeSchema(s);
+        }
+
+        // 1. Nuke all component definitions
+        if (document.Components != null)
+        {
+            document.Components.Examples = null;
+
+            if (document.Components.Schemas != null)
+                foreach (var schema in document.Components.Schemas.Values) NukeSchema(schema);
+
+            if (document.Components.Parameters != null)
+                foreach (var p in document.Components.Parameters.Values) { p.Example = null; p.Examples = null; }
+
+            if (document.Components.Headers != null)
+                foreach (var h in document.Components.Headers.Values) { h.Example = null; h.Examples = null; }
+
+            if (document.Components.RequestBodies != null)
+                foreach (var rb in document.Components.RequestBodies.Values)
+                    if (rb.Content != null) foreach (var mt in rb.Content.Values) { mt.Example = null; mt.Examples = null; }
+
+            if (document.Components.Responses != null)
+                foreach (var resp in document.Components.Responses.Values)
+                    if (resp.Content != null) foreach (var mt in resp.Content.Values) { mt.Example = null; mt.Examples = null; }
+        }
+
+        // 2. Nuke all path and operation-level definitions
+        if (document.Paths != null)
+        {
+            foreach (var pathItem in document.Paths.Values)
+            {
+                // Clean parameters directly on the path
+                if (pathItem.Parameters != null)
+                    foreach (var p in pathItem.Parameters) { p.Example = null; p.Examples = null; NukeSchema(p.Schema); }
+
+                // Clean items within each operation
+                foreach (var operation in pathItem.Operations.Values)
+                {
+                    if (operation.Parameters != null)
+                        foreach (var p in operation.Parameters) { p.Example = null; p.Examples = null; NukeSchema(p.Schema); }
+
+                    if (operation.RequestBody?.Content != null)
+                        foreach (var mt in operation.RequestBody.Content.Values) { mt.Example = null; mt.Examples = null; NukeSchema(mt.Schema); }
+
+                    if (operation.Responses != null)
+                        foreach (var resp in operation.Responses.Values)
+                        {
+                            if (resp.Headers != null)
+                                foreach (var h in resp.Headers.Values) { h.Example = null; h.Examples = null; NukeSchema(h.Schema); }
+
+                            if (resp.Content != null)
+                                foreach (var mt in resp.Content.Values) { mt.Example = null; mt.Examples = null; NukeSchema(mt.Schema); }
+                        }
+                }
+            }
+        }
+
+        _logger.LogInformation("--- EXAMPLE ERASURE COMPLETE ---");
     }
 
     private void DeepCleanSchema(OpenApiSchema? schema, HashSet<OpenApiSchema> visited)
@@ -393,72 +564,72 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         return new MemoryStream(Encoding.UTF8.GetBytes(raw));
     }
 
-    private void SanitizeAllExamples(OpenApiDocument document)
-    {
-        _logger.LogInformation("Starting sanitation of all 'example' values in the document...");
+    //private void SanitizeAllExamples(OpenApiDocument document)
+    //{
+    //    _logger.LogInformation("Starting sanitation of all 'example' values in the document...");
 
-        // 1. Walk through all Paths -> Operations
-        foreach (var pathItem in document.Paths.Values)
-        {
-            foreach (var operation in pathItem.Operations.Values)
-            {
-                // Clean RequestBody example
-                if (operation.RequestBody?.Content != null)
-                {
-                    foreach (var mediaType in operation.RequestBody.Content.Values)
-                    {
-                        CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
-                        if (mediaType.Examples != null)
-                        {
-                            foreach (var example in mediaType.Examples.Values)
-                            {
-                                CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-                            }
-                        }
-                    }
-                }
+    //    // 1. Walk through all Paths -> Operations
+    //    foreach (var pathItem in document.Paths.Values)
+    //    {
+    //        foreach (var operation in pathItem.Operations.Values)
+    //        {
+    //            // Clean RequestBody example
+    //            if (operation.RequestBody?.Content != null)
+    //            {
+    //                foreach (var mediaType in operation.RequestBody.Content.Values)
+    //                {
+    //                    CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
+    //                    if (mediaType.Examples != null)
+    //                    {
+    //                        foreach (var example in mediaType.Examples.Values)
+    //                        {
+    //                            CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
+    //                        }
+    //                    }
+    //                }
+    //            }
 
-                // Clean Response examples
-                foreach (var response in operation.Responses.Values)
-                {
-                    if (response.Content != null)
-                    {
-                        foreach (var mediaType in response.Content.Values)
-                        {
-                            CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
-                            if (mediaType.Examples != null)
-                            {
-                                foreach (var example in mediaType.Examples.Values)
-                                {
-                                    CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-                                }
-                            }
-                        }
-                    }
-                }
+    //            // Clean Response examples
+    //            foreach (var response in operation.Responses.Values)
+    //            {
+    //                if (response.Content != null)
+    //                {
+    //                    foreach (var mediaType in response.Content.Values)
+    //                    {
+    //                        CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
+    //                        if (mediaType.Examples != null)
+    //                        {
+    //                            foreach (var example in mediaType.Examples.Values)
+    //                            {
+    //                                CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
+    //                            }
+    //                        }
+    //                    }
+    //                }
+    //            }
 
-                // Clean Parameter examples
-                if (operation.Parameters != null)
-                {
-                    foreach (var parameter in operation.Parameters)
-                    {
-                        CleanExampleKeys(parameter.Example, new HashSet<IOpenApiAny>());
-                        if (parameter.Examples != null)
-                        {
-                            foreach (var example in parameter.Examples.Values)
-                            {
-                                CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    //            // Clean Parameter examples
+    //            if (operation.Parameters != null)
+    //            {
+    //                foreach (var parameter in operation.Parameters)
+    //                {
+    //                    CleanExampleKeys(parameter.Example, new HashSet<IOpenApiAny>());
+    //                    if (parameter.Examples != null)
+    //                    {
+    //                        foreach (var example in parameter.Examples.Values)
+    //                        {
+    //                            CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
+    //                        }
+    //                    }
+    //                }
+    //            }
+    //        }
+    //    }
 
-        // 2. You could extend this to walk through Components as well, if needed.
-        // For now, the path-based examples are the most common source of issues.
-        _logger.LogInformation("Finished sanitation of 'example' values.");
-    }
+    //    // 2. You could extend this to walk through Components as well, if needed.
+    //    // For now, the path-based examples are the most common source of issues.
+    //    _logger.LogInformation("Finished sanitation of 'example' values.");
+    //}
 
     private void CleanExampleKeys(IOpenApiAny? current, HashSet<IOpenApiAny> visited)
     {
@@ -546,7 +717,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 Type = primitiveSchema.Type,
                 Format = primitiveSchema.Format,
                 Description = primitiveSchema.Description,
-                Example = primitiveSchema.Example,
+               // Example = primitiveSchema.Example,
                 MaxLength = primitiveSchema.MaxLength,
                 Pattern = primitiveSchema.Pattern,
                 Minimum = primitiveSchema.Minimum,
@@ -573,7 +744,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     schema.Type = inlineSchema.Type;
                     schema.Format = inlineSchema.Format;
                     schema.Description = inlineSchema.Description;
-                    schema.Example = inlineSchema.Example;
+                    //schema.Example = inlineSchema.Example;
                     schema.MaxLength = inlineSchema.MaxLength;
                     schema.Pattern = inlineSchema.Pattern;
                     schema.Minimum = inlineSchema.Minimum;
@@ -1013,6 +1184,69 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                     schema.Required = new HashSet<string>();
                 }
             }
+        }
+
+        if (document.Components?.Schemas != null)
+        {
+            foreach (var schema in document.Components.Schemas.Values)
+            {
+                if (schema.Enum != null && schema.Enum.Count > 0)
+                {
+                    // if all enum values are strings, force type="string"
+                    if (schema.Enum.All(x => x is OpenApiString))
+                    {
+                        schema.Type = "string";
+                    }
+                    // else if you have integer enums, you could do:
+                    //          else if (schema.Enum.All(x => x is OpenApiInteger))
+                    //          {
+                    //              schema.Type = "integer";
+                    //          }
+                }
+            }
+        }
+
+        if (document.Components?.Schemas != null)
+        {
+            var visited = new HashSet<OpenApiSchema>();
+            foreach (var root in document.Components.Schemas.Values)
+                InjectTypeForNullable(root, visited);
+        }
+
+        void InjectTypeForNullable(OpenApiSchema schema, HashSet<OpenApiSchema> visited)
+        {
+            if (schema == null || !visited.Add(schema))
+                return;
+
+            if (schema.Nullable && string.IsNullOrWhiteSpace(schema.Type))
+            {
+                schema.Type = "object";
+                _logger.LogWarning("Injected default type='object' for nullable schema '{SchemaTitle}'",
+                    schema.Title ?? "(no title)");
+            }
+
+            // recurse
+            if (schema.Properties != null)
+                foreach (var prop in schema.Properties.Values)
+                    InjectTypeForNullable(prop, visited);
+
+            if (schema.Items != null)
+                InjectTypeForNullable(schema.Items, visited);
+
+            if (schema.AdditionalProperties != null)
+                InjectTypeForNullable(schema.AdditionalProperties, visited);
+
+            if (schema.AllOf != null)
+                foreach (var s in schema.AllOf)
+                    InjectTypeForNullable(s, visited);
+
+            if (schema.OneOf != null)
+                foreach (var s in schema.OneOf)
+                    InjectTypeForNullable(s, visited);
+
+            if (schema.AnyOf != null)
+                foreach (var s in schema.AnyOf)
+                    InjectTypeForNullable(s, visited);
         }
     }
 
@@ -1480,6 +1714,207 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         }
 
         return diagnostic;
+    }
+
+    /// <summary>
+    /// Recursively traverses the entire OpenAPI document and removes all 'example' and 'examples' properties.
+    /// This is a brute-force cleanup to ensure no example data is included in the final spec.
+    /// It replaces the original sanitization logic with complete removal.
+    /// </summary>
+    /// <param name="document">The OpenAPI document to clean.</param>
+    private void SanitizeAllExamples(OpenApiDocument document)
+    {
+        _logger.LogInformation("Starting removal of all 'example' and 'examples' properties from the document...");
+
+        var visitedSchemas = new HashSet<OpenApiSchema>();
+
+        // Helper function to process any schema object recursively.
+        // It uses a HashSet to avoid infinite loops in schemas with circular references.
+        void ProcessSchema(OpenApiSchema? schema)
+        {
+            if (schema == null || !visitedSchemas.Add(schema))
+            {
+                return;
+            }
+
+            // Remove the top-level example from the schema
+            schema.Example = null;
+
+            // Recurse into all possible nested schemas
+            if (schema.Items != null)
+            {
+                ProcessSchema(schema.Items);
+            }
+            if (schema.Properties != null)
+            {
+                foreach (var propSchema in schema.Properties.Values)
+                {
+                    ProcessSchema(propSchema);
+                }
+            }
+            if (schema.AdditionalProperties != null)
+            {
+                ProcessSchema(schema.AdditionalProperties);
+            }
+            if (schema.AllOf != null)
+            {
+                foreach (var allOfSchema in schema.AllOf)
+                {
+                    ProcessSchema(allOfSchema);
+                }
+            }
+            if (schema.AnyOf != null)
+            {
+                foreach (var anyOfSchema in schema.AnyOf)
+                {
+                    ProcessSchema(anyOfSchema);
+                }
+            }
+            if (schema.OneOf != null)
+            {
+                foreach (var oneOfSchema in schema.OneOf)
+                {
+                    ProcessSchema(oneOfSchema);
+                }
+            }
+        }
+
+        // Helper to process a media type object
+        void ProcessMediaType(OpenApiMediaType? mediaType)
+        {
+            if (mediaType == null) return;
+
+            mediaType.Example = null;
+            mediaType.Examples = null; // Clears the entire 'examples' map
+            ProcessSchema(mediaType.Schema);
+        }
+
+        // Helper to process a parameter object
+        void ProcessParameter(OpenApiParameter? parameter)
+        {
+            if (parameter == null) return;
+
+            parameter.Example = null;
+            parameter.Examples = null;
+            ProcessSchema(parameter.Schema);
+        }
+
+        // Helper to process a header object
+        void ProcessHeader(OpenApiHeader? header)
+        {
+            if (header == null) return;
+
+            header.Example = null;
+            header.Examples = null;
+            ProcessSchema(header.Schema);
+        }
+
+        // Helper to process the contents of a response
+        void ProcessResponse(OpenApiResponse? response)
+        {
+            if (response == null) return;
+
+            if (response.Content != null)
+            {
+                foreach (var mediaType in response.Content.Values)
+                {
+                    ProcessMediaType(mediaType);
+                }
+            }
+            if (response.Headers != null)
+            {
+                foreach (var header in response.Headers.Values)
+                {
+                    ProcessHeader(header);
+                }
+            }
+        }
+
+        // 1. Process all Components
+        if (document.Components != null)
+        {
+            // Remove the top-level 'examples' component section
+            document.Components.Examples = null;
+
+            if (document.Components.Schemas != null)
+            {
+                foreach (var schema in document.Components.Schemas.Values)
+                {
+                    ProcessSchema(schema);
+                }
+            }
+            if (document.Components.Parameters != null)
+            {
+                foreach (var parameter in document.Components.Parameters.Values)
+                {
+                    ProcessParameter(parameter);
+                }
+            }
+            if (document.Components.Headers != null)
+            {
+                foreach (var header in document.Components.Headers.Values)
+                {
+                    ProcessHeader(header);
+                }
+            }
+            if (document.Components.RequestBodies != null)
+            {
+                foreach (var requestBody in document.Components.RequestBodies.Values)
+                {
+                    if (requestBody.Content == null) continue;
+                    foreach (var mediaType in requestBody.Content.Values)
+                    {
+                        ProcessMediaType(mediaType);
+                    }
+                }
+            }
+            if (document.Components.Responses != null)
+            {
+                foreach (var response in document.Components.Responses.Values)
+                {
+                    ProcessResponse(response);
+                }
+            }
+        }
+
+        // 2. Process all Paths and Operations
+        if (document.Paths != null)
+        {
+            foreach (var pathItem in document.Paths.Values)
+            {
+                foreach (var operation in pathItem.Operations.Values)
+                {
+                    // Process parameters
+                    if (operation.Parameters != null)
+                    {
+                        foreach (var parameter in operation.Parameters)
+                        {
+                            ProcessParameter(parameter);
+                        }
+                    }
+
+                    // Process request body
+                    if (operation.RequestBody?.Content != null)
+                    {
+                        foreach (var mediaType in operation.RequestBody.Content.Values)
+                        {
+                            ProcessMediaType(mediaType);
+                        }
+                    }
+
+                    // Process responses
+                    if (operation.Responses != null)
+                    {
+                        foreach (var response in operation.Responses.Values)
+                        {
+                            ProcessResponse(response);
+                        }
+                    }
+                }
+            }
+        }
+
+        _logger.LogInformation("Finished removing all 'example' and 'examples' properties.");
     }
 
     private void EnsureSecuritySchemes(OpenApiDocument document)
