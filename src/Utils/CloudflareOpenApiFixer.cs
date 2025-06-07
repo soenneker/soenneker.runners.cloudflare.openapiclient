@@ -52,50 +52,11 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                 throw new InvalidDataException("The OpenAPI document could not be parsed into a valid object model.");
             }
 
-            NukeAllExamples(document);
-
             EnsureSecuritySchemes(document);
 
             RenameConflictingPaths(document);
             RenameInvalidComponentSchemas(document);
             FixInvalidDefaults(document);
-
-            // --- STAGE 1: Initial Cleanup ---
-            // Run sanitation on existing components. This is still good practice.
-            if (document.Components?.Schemas != null)
-            {
-                foreach (var schema in document.Components.Schemas.Values)
-                {
-                    RenameInvalidPropertyKeys(schema, new HashSet<OpenApiSchema>());
-                }
-            }
-
-            // Sanitize inline schemas within operations BEFORE extraction.
-            // This is a more direct fix.
-            foreach (var path in document.Paths.Values)
-            {
-                foreach (var op in path.Operations.Values)
-                {
-                    if (op.RequestBody?.Content != null)
-                    {
-                        foreach (var media in op.RequestBody.Content.Values)
-                        {
-                            RenameInvalidPropertyKeys(media.Schema, new HashSet<OpenApiSchema>());
-                        }
-                    }
-
-                    foreach (var resp in op.Responses.Values)
-                    {
-                        if (resp.Content != null)
-                        {
-                            foreach (var media in resp.Content.Values)
-                            {
-                                RenameInvalidPropertyKeys(media.Schema, new HashSet<OpenApiSchema>());
-                            }
-                        }
-                    }
-                }
-            }
 
 
             InlinePrimitiveComponents(document);
@@ -105,19 +66,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             // --- STAGE 2: Extraction ---
             // 1) Extract schemas into components
             ExtractInlineSchemas(document, cancellationToken);
-
-            // --- STAGE 3: Post-Extraction Cleanup ---
-            // 2) Re-run the property key sanitation on ALL components.
-            //    This guarantees that any newly extracted schemas are also cleaned.
-            //    This is the most critical change.
-            if (document.Components?.Schemas != null)
-            {
-                _logger.LogInformation("Running post-extraction property key sanitation...");
-                foreach (var schema in document.Components.Schemas.Values)
-                {
-                    RenameInvalidPropertyKeys(schema, new HashSet<OpenApiSchema>());
-                }
-            }
 
             // 3) Re‐scrub newly added schemas
             ScrubComponentRefs(document, cancellationToken);
@@ -151,7 +99,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
 
             // 7) Value‐enum fix & discriminators
             FixAllInlineValueEnums(document);
-            StripAllDiscriminators(document);
+           // StripAllDiscriminators(document);
 
             if (document.Components?.Schemas != null)
             {
@@ -176,19 +124,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
                             fixedProps[name] = prop.Value;
                         }
                         schema.Properties = fixedProps;
-                    }
-                }
-            }
-
-            void CleanEmptyKeysOn<T>(IDictionary<string, T> dict, string dictName)
-            {
-                if (dict == null) return;
-                foreach (var key in dict.Keys.ToList())
-                {
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        _logger.LogWarning("Dropping empty key from " + dictName);
-                        dict.Remove(key);
                     }
                 }
             }
@@ -732,129 +667,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             m => $"{{ \"$ref\": \"#/components/schemas/{m.Groups["id"].Value}\" }}");
 
         return new MemoryStream(Encoding.UTF8.GetBytes(raw));
-    }
-
-    //private void SanitizeAllExamples(OpenApiDocument document)
-    //{
-    //    _logger.LogInformation("Starting sanitation of all 'example' values in the document...");
-
-    //    // 1. Walk through all Paths -> Operations
-    //    foreach (var pathItem in document.Paths.Values)
-    //    {
-    //        foreach (var operation in pathItem.Operations.Values)
-    //        {
-    //            // Clean RequestBody example
-    //            if (operation.RequestBody?.Content != null)
-    //            {
-    //                foreach (var mediaType in operation.RequestBody.Content.Values)
-    //                {
-    //                    CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
-    //                    if (mediaType.Examples != null)
-    //                    {
-    //                        foreach (var example in mediaType.Examples.Values)
-    //                        {
-    //                            CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-    //                        }
-    //                    }
-    //                }
-    //            }
-
-    //            // Clean Response examples
-    //            foreach (var response in operation.Responses.Values)
-    //            {
-    //                if (response.Content != null)
-    //                {
-    //                    foreach (var mediaType in response.Content.Values)
-    //                    {
-    //                        CleanExampleKeys(mediaType.Example, new HashSet<IOpenApiAny>());
-    //                        if (mediaType.Examples != null)
-    //                        {
-    //                            foreach (var example in mediaType.Examples.Values)
-    //                            {
-    //                                CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-    //                            }
-    //                        }
-    //                    }
-    //                }
-    //            }
-
-    //            // Clean Parameter examples
-    //            if (operation.Parameters != null)
-    //            {
-    //                foreach (var parameter in operation.Parameters)
-    //                {
-    //                    CleanExampleKeys(parameter.Example, new HashSet<IOpenApiAny>());
-    //                    if (parameter.Examples != null)
-    //                    {
-    //                        foreach (var example in parameter.Examples.Values)
-    //                        {
-    //                            CleanExampleKeys(example.Value, new HashSet<IOpenApiAny>());
-    //                        }
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
-
-    //    // 2. You could extend this to walk through Components as well, if needed.
-    //    // For now, the path-based examples are the most common source of issues.
-    //    _logger.LogInformation("Finished sanitation of 'example' values.");
-    //}
-
-    private void CleanExampleKeys(IOpenApiAny? current, HashSet<IOpenApiAny> visited)
-    {
-        if (current == null || !visited.Add(current))
-        {
-            return;
-        }
-
-        if (current is OpenApiObject obj)
-        {
-            var keyMapping = new Dictionary<string, string>();
-            var originalKeys = obj.Keys.ToList();
-
-            foreach (var oldKey in originalKeys)
-            {
-                if (string.IsNullOrWhiteSpace(oldKey) || !IsValidIdentifier(oldKey))
-                {
-                    // Sanitize the key using your existing helper
-                    var newKey = SanitizeName(oldKey);
-                    // Ensure uniqueness if the sanitized key is empty or already exists
-                    if (string.IsNullOrWhiteSpace(newKey) || obj.ContainsKey(newKey))
-                    {
-                        newKey = $"prop_{Guid.NewGuid():N}";
-                    }
-                    keyMapping[oldKey] = newKey;
-                    _logger.LogWarning("Sanitizing invalid key '{OldKey}' to '{NewKey}' in an 'example' object.", oldKey, newKey);
-                }
-            }
-
-            if (keyMapping.Any())
-            {
-                // Rebuild the object with the corrected keys
-                foreach (var mapping in keyMapping)
-                {
-                    var value = obj[mapping.Key];
-                    obj.Remove(mapping.Key);
-                    obj[mapping.Value] = value;
-                }
-            }
-
-            // After fixing the keys, recurse into the values
-            foreach (var value in obj.Values)
-            {
-                CleanExampleKeys(value, visited);
-            }
-        }
-        else if (current is OpenApiArray arr)
-        {
-            // Recurse into each item in the array
-            foreach (var item in arr)
-            {
-                CleanExampleKeys(item, visited);
-            }
-        }
-        // Primitives (OpenApiString, OpenApiInteger, etc.) do not need recursion
     }
 
     private void InlinePrimitiveComponents(OpenApiDocument document)
@@ -1900,12 +1712,19 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         return schemaEmpty && !hasExample;
     }
 
-
     private static bool IsSchemaEmpty(OpenApiSchema schema)
     {
-        return schema == null || (string.IsNullOrWhiteSpace(schema.Type) && (schema.Properties == null || !schema.Properties.Any()) && !schema.AllOf.Any() &&
-                                  !schema.OneOf.Any() && !schema.AnyOf.Any() && schema.Items == null && (schema.Enum == null || !schema.Enum.Any()) &&
-                                  schema.AdditionalProperties == null && !schema.AdditionalPropertiesAllowed);
+        if (schema == null) return true;
+
+        return string.IsNullOrWhiteSpace(schema.Type) && 
+               (schema.Properties == null || !schema.Properties.Any()) && 
+               (schema.AllOf == null || !schema.AllOf.Any()) &&
+               (schema.OneOf == null || !schema.OneOf.Any()) && 
+               (schema.AnyOf == null || !schema.AnyOf.Any()) && 
+               schema.Items == null && 
+               (schema.Enum == null || !schema.Enum.Any()) &&
+               schema.AdditionalProperties == null && 
+               !schema.AdditionalPropertiesAllowed;
     }
 
     private void EnsureResponseDescriptions(OpenApiResponses responses)
@@ -1917,6 +1736,19 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             if (string.IsNullOrWhiteSpace(resp.Description))
             {
                 resp.Description = code == "default" ? "Default response" : $"{code} response";
+            }
+        }
+    }
+
+    private void CleanEmptyKeysOn<T>(IDictionary<string, T> dict, string dictName)
+    {
+        if (dict == null) return;
+        foreach (var key in dict.Keys.ToList())
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                _logger.LogWarning("Dropping empty key from " + dictName);
+                dict.Remove(key);
             }
         }
     }
@@ -1941,207 +1773,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         }
 
         return diagnostic;
-    }
-
-    /// <summary>
-    /// Recursively traverses the entire OpenAPI document and removes all 'example' and 'examples' properties.
-    /// This is a brute-force cleanup to ensure no example data is included in the final spec.
-    /// It replaces the original sanitization logic with complete removal.
-    /// </summary>
-    /// <param name="document">The OpenAPI document to clean.</param>
-    private void SanitizeAllExamples(OpenApiDocument document)
-    {
-        _logger.LogInformation("Starting removal of all 'example' and 'examples' properties from the document...");
-
-        var visitedSchemas = new HashSet<OpenApiSchema>();
-
-        // Helper function to process any schema object recursively.
-        // It uses a HashSet to avoid infinite loops in schemas with circular references.
-        void ProcessSchema(OpenApiSchema? schema)
-        {
-            if (schema == null || !visitedSchemas.Add(schema))
-            {
-                return;
-            }
-
-            // Remove the top-level example from the schema
-            schema.Example = null;
-
-            // Recurse into all possible nested schemas
-            if (schema.Items != null)
-            {
-                ProcessSchema(schema.Items);
-            }
-            if (schema.Properties != null)
-            {
-                foreach (var propSchema in schema.Properties.Values)
-                {
-                    ProcessSchema(propSchema);
-                }
-            }
-            if (schema.AdditionalProperties != null)
-            {
-                ProcessSchema(schema.AdditionalProperties);
-            }
-            if (schema.AllOf != null)
-            {
-                foreach (var allOfSchema in schema.AllOf)
-                {
-                    ProcessSchema(allOfSchema);
-                }
-            }
-            if (schema.AnyOf != null)
-            {
-                foreach (var anyOfSchema in schema.AnyOf)
-                {
-                    ProcessSchema(anyOfSchema);
-                }
-            }
-            if (schema.OneOf != null)
-            {
-                foreach (var oneOfSchema in schema.OneOf)
-                {
-                    ProcessSchema(oneOfSchema);
-                }
-            }
-        }
-
-        // Helper to process a media type object
-        void ProcessMediaType(OpenApiMediaType? mediaType)
-        {
-            if (mediaType == null) return;
-
-            mediaType.Example = null;
-            mediaType.Examples = null; // Clears the entire 'examples' map
-            ProcessSchema(mediaType.Schema);
-        }
-
-        // Helper to process a parameter object
-        void ProcessParameter(OpenApiParameter? parameter)
-        {
-            if (parameter == null) return;
-
-            parameter.Example = null;
-            parameter.Examples = null;
-            ProcessSchema(parameter.Schema);
-        }
-
-        // Helper to process a header object
-        void ProcessHeader(OpenApiHeader? header)
-        {
-            if (header == null) return;
-
-            header.Example = null;
-            header.Examples = null;
-            ProcessSchema(header.Schema);
-        }
-
-        // Helper to process the contents of a response
-        void ProcessResponse(OpenApiResponse? response)
-        {
-            if (response == null) return;
-
-            if (response.Content != null)
-            {
-                foreach (var mediaType in response.Content.Values)
-                {
-                    ProcessMediaType(mediaType);
-                }
-            }
-            if (response.Headers != null)
-            {
-                foreach (var header in response.Headers.Values)
-                {
-                    ProcessHeader(header);
-                }
-            }
-        }
-
-        // 1. Process all Components
-        if (document.Components != null)
-        {
-            // Remove the top-level 'examples' component section
-            document.Components.Examples = null;
-
-            if (document.Components.Schemas != null)
-            {
-                foreach (var schema in document.Components.Schemas.Values)
-                {
-                    ProcessSchema(schema);
-                }
-            }
-            if (document.Components.Parameters != null)
-            {
-                foreach (var parameter in document.Components.Parameters.Values)
-                {
-                    ProcessParameter(parameter);
-                }
-            }
-            if (document.Components.Headers != null)
-            {
-                foreach (var header in document.Components.Headers.Values)
-                {
-                    ProcessHeader(header);
-                }
-            }
-            if (document.Components.RequestBodies != null)
-            {
-                foreach (var requestBody in document.Components.RequestBodies.Values)
-                {
-                    if (requestBody.Content == null) continue;
-                    foreach (var mediaType in requestBody.Content.Values)
-                    {
-                        ProcessMediaType(mediaType);
-                    }
-                }
-            }
-            if (document.Components.Responses != null)
-            {
-                foreach (var response in document.Components.Responses.Values)
-                {
-                    ProcessResponse(response);
-                }
-            }
-        }
-
-        // 2. Process all Paths and Operations
-        if (document.Paths != null)
-        {
-            foreach (var pathItem in document.Paths.Values)
-            {
-                foreach (var operation in pathItem.Operations.Values)
-                {
-                    // Process parameters
-                    if (operation.Parameters != null)
-                    {
-                        foreach (var parameter in operation.Parameters)
-                        {
-                            ProcessParameter(parameter);
-                        }
-                    }
-
-                    // Process request body
-                    if (operation.RequestBody?.Content != null)
-                    {
-                        foreach (var mediaType in operation.RequestBody.Content.Values)
-                        {
-                            ProcessMediaType(mediaType);
-                        }
-                    }
-
-                    // Process responses
-                    if (operation.Responses != null)
-                    {
-                        foreach (var response in operation.Responses.Values)
-                        {
-                            ProcessResponse(response);
-                        }
-                    }
-                }
-            }
-        }
-
-        _logger.LogInformation("Finished removing all 'example' and 'examples' properties.");
     }
 
     private void EnsureSecuritySchemes(OpenApiDocument document)
@@ -2399,16 +2030,15 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
     {
         if (schema == null) return true;
 
-        return string.IsNullOrWhiteSpace(schema.Type) &&
-               (schema.Properties == null || !schema.Properties.Any()) &&
-               schema.Reference == null &&
+        return string.IsNullOrWhiteSpace(schema.Type) && 
+               (schema.Properties == null || !schema.Properties.Any()) && 
                (schema.AllOf == null || !schema.AllOf.Any()) &&
-               (schema.OneOf == null || !schema.OneOf.Any()) &&
-               (schema.AnyOf == null || !schema.AnyOf.Any()) &&
-               schema.Items == null &&
-               schema.AdditionalProperties == null &&
-               !schema.AdditionalPropertiesAllowed &&
-               (schema.Enum == null || !schema.Enum.Any());
+               (schema.OneOf == null || !schema.OneOf.Any()) && 
+               (schema.AnyOf == null || !schema.AnyOf.Any()) && 
+               schema.Items == null && 
+               (schema.Enum == null || !schema.Enum.Any()) &&
+               schema.AdditionalProperties == null && 
+               !schema.AdditionalPropertiesAllowed;
     }
 
     private void InjectTypeForNullable(OpenApiSchema schema, HashSet<OpenApiSchema> visited)
