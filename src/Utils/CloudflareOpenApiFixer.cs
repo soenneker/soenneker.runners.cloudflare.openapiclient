@@ -2270,7 +2270,7 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
     {
         if (schema == null || !visited.Add(schema)) return;
 
-        // Process properties first to handle nested empty objects
+        // Process nested schemas first
         if (schema.Properties != null)
         {
             foreach (var prop in schema.Properties.Values)
@@ -2279,154 +2279,6 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
             }
         }
 
-        // Remove empty objects from allOf
-        if (schema.AllOf != null)
-        {
-            // First, remove any completely empty objects
-            schema.AllOf = schema.AllOf.Where(s => !IsEmptySchema(s)).ToList();
-
-            // If we have multiple non-empty schemas, merge their properties
-            if (schema.AllOf.Count > 1)
-            {
-                var mergedSchema = new OpenApiSchema
-                {
-                    Type = schema.Type,
-                    Format = schema.Format,
-                    Description = schema.Description,
-                    Properties = new Dictionary<string, OpenApiSchema>(),
-                    Required = new HashSet<string>()
-                };
-
-                foreach (var s in schema.AllOf)
-                {
-                    if (s.Properties != null)
-                    {
-                        foreach (var prop in s.Properties)
-                        {
-                            mergedSchema.Properties[prop.Key] = prop.Value;
-                        }
-                    }
-                    if (s.Required != null)
-                    {
-                        foreach (var req in s.Required)
-                        {
-                            mergedSchema.Required.Add(req);
-                        }
-                    }
-                }
-
-                // Replace the allOf with the merged schema
-                schema.AllOf = null;
-                schema.Properties = mergedSchema.Properties;
-                schema.Required = mergedSchema.Required;
-            }
-            else if (schema.AllOf.Count == 1)
-            {
-                // If only one item remains, merge its properties into the parent schema
-                var singleItem = schema.AllOf[0];
-                if (singleItem.Reference != null)
-                {
-                    schema.Reference = singleItem.Reference;
-                }
-                else
-                {
-                    if (singleItem.Type != null) schema.Type = singleItem.Type;
-                    if (singleItem.Format != null) schema.Format = singleItem.Format;
-                    if (singleItem.Description != null) schema.Description = singleItem.Description;
-                    if (singleItem.Properties != null)
-                    {
-                        schema.Properties ??= new Dictionary<string, OpenApiSchema>();
-                        foreach (var prop in singleItem.Properties)
-                        {
-                            schema.Properties[prop.Key] = prop.Value;
-                        }
-                    }
-                    if (singleItem.Required != null)
-                    {
-                        schema.Required ??= new HashSet<string>();
-                        foreach (var req in singleItem.Required)
-                        {
-                            schema.Required.Add(req);
-                        }
-                    }
-                }
-                schema.AllOf = null;
-            }
-            else
-            {
-                schema.AllOf = null;
-            }
-        }
-
-        // Remove empty objects from oneOf
-        if (schema.OneOf != null)
-        {
-            schema.OneOf = schema.OneOf.Where(s => !IsEmptySchema(s)).ToList();
-            if (!schema.OneOf.Any())
-            {
-                schema.OneOf = null;
-            }
-            else if (schema.OneOf.Count == 1)
-            {
-                // If only one item remains, use it directly
-                var singleItem = schema.OneOf[0];
-                if (singleItem.Reference != null)
-                {
-                    schema.Reference = singleItem.Reference;
-                }
-                else
-                {
-                    if (singleItem.Type != null) schema.Type = singleItem.Type;
-                    if (singleItem.Format != null) schema.Format = singleItem.Format;
-                    if (singleItem.Description != null) schema.Description = singleItem.Description;
-                    if (singleItem.Properties != null)
-                    {
-                        schema.Properties ??= new Dictionary<string, OpenApiSchema>();
-                        foreach (var prop in singleItem.Properties)
-                        {
-                            schema.Properties[prop.Key] = prop.Value;
-                        }
-                    }
-                }
-                schema.OneOf = null;
-            }
-        }
-
-        // Remove empty objects from anyOf
-        if (schema.AnyOf != null)
-        {
-            schema.AnyOf = schema.AnyOf.Where(s => !IsEmptySchema(s)).ToList();
-            if (!schema.AnyOf.Any())
-            {
-                schema.AnyOf = null;
-            }
-            else if (schema.AnyOf.Count == 1)
-            {
-                // If only one item remains, use it directly
-                var singleItem = schema.AnyOf[0];
-                if (singleItem.Reference != null)
-                {
-                    schema.Reference = singleItem.Reference;
-                }
-                else
-                {
-                    if (singleItem.Type != null) schema.Type = singleItem.Type;
-                    if (singleItem.Format != null) schema.Format = singleItem.Format;
-                    if (singleItem.Description != null) schema.Description = singleItem.Description;
-                    if (singleItem.Properties != null)
-                    {
-                        schema.Properties ??= new Dictionary<string, OpenApiSchema>();
-                        foreach (var prop in singleItem.Properties)
-                        {
-                            schema.Properties[prop.Key] = prop.Value;
-                        }
-                    }
-                }
-                schema.AnyOf = null;
-            }
-        }
-
-        // Process remaining nested schemas
         if (schema.Items != null)
         {
             RemoveEmptyCompositionObjects(schema.Items, visited);
@@ -2436,13 +2288,117 @@ public class CloudflareOpenApiFixer : ICloudflareOpenApiFixer
         {
             RemoveEmptyCompositionObjects(schema.AdditionalProperties, visited);
         }
+
+        // Process allOf array
+        if (schema.AllOf != null)
+        {
+            var validSchemas = schema.AllOf
+                .Where(s => s != null && !IsEmptySchema(s))
+                .ToList();
+
+            if (!validSchemas.Any())
+            {
+                schema.AllOf = null;
+            }
+            else if (validSchemas.Count == 1)
+            {
+                // If only one schema remains, merge its properties into the parent
+                var remainingSchema = validSchemas[0];
+                if (remainingSchema.Properties != null)
+                {
+                    schema.Properties ??= new Dictionary<string, OpenApiSchema>();
+                    foreach (var prop in remainingSchema.Properties)
+                    {
+                        schema.Properties[prop.Key] = prop.Value;
+                    }
+                }
+                if (remainingSchema.Required != null)
+                {
+                    schema.Required ??= new HashSet<string>();
+                    foreach (var req in remainingSchema.Required)
+                    {
+                        schema.Required.Add(req);
+                    }
+                }
+                schema.AllOf = null;
+            }
+        }
+
+        // Process oneOf array
+        if (schema.OneOf != null)
+        {
+            var validSchemas = schema.OneOf
+                .Where(s => s != null && !IsEmptySchema(s))
+                .ToList();
+
+            if (!validSchemas.Any())
+            {
+                schema.OneOf = null;
+            }
+            else if (validSchemas.Count == 1)
+            {
+                // If only one schema remains, merge its properties into the parent
+                var remainingSchema = validSchemas[0];
+                if (remainingSchema.Properties != null)
+                {
+                    schema.Properties ??= new Dictionary<string, OpenApiSchema>();
+                    foreach (var prop in remainingSchema.Properties)
+                    {
+                        schema.Properties[prop.Key] = prop.Value;
+                    }
+                }
+                if (remainingSchema.Required != null)
+                {
+                    schema.Required ??= new HashSet<string>();
+                    foreach (var req in remainingSchema.Required)
+                    {
+                        schema.Required.Add(req);
+                    }
+                }
+                schema.OneOf = null;
+            }
+        }
+
+        // Process anyOf array
+        if (schema.AnyOf != null)
+        {
+            var validSchemas = schema.AnyOf
+                .Where(s => s != null && !IsEmptySchema(s))
+                .ToList();
+
+            if (!validSchemas.Any())
+            {
+                schema.AnyOf = null;
+            }
+            else if (validSchemas.Count == 1)
+            {
+                // If only one schema remains, merge its properties into the parent
+                var remainingSchema = validSchemas[0];
+                if (remainingSchema.Properties != null)
+                {
+                    schema.Properties ??= new Dictionary<string, OpenApiSchema>();
+                    foreach (var prop in remainingSchema.Properties)
+                    {
+                        schema.Properties[prop.Key] = prop.Value;
+                    }
+                }
+                if (remainingSchema.Required != null)
+                {
+                    schema.Required ??= new HashSet<string>();
+                    foreach (var req in remainingSchema.Required)
+                    {
+                        schema.Required.Add(req);
+                    }
+                }
+                schema.AnyOf = null;
+            }
+        }
     }
 
     private bool IsEmptySchema(OpenApiSchema schema)
     {
         if (schema == null) return true;
 
-        // Check if it's an empty object (no properties, no type, no ref, etc.)
         return string.IsNullOrWhiteSpace(schema.Type) &&
                (schema.Properties == null || !schema.Properties.Any()) &&
                schema.Reference == null &&
