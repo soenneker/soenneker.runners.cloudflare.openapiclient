@@ -1,7 +1,7 @@
 ﻿using Soenneker.Facts.Local;
+using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Tests.FixturedUnit;
 using System.Threading.Tasks;
-using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Xunit;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Tests;
@@ -22,7 +22,7 @@ public class CloudflareOpenApiFixerTests : FixturedUnitTest
     [LocalFact]
     public async ValueTask Fix()
     { 
-        var cloudflareOpenApiFixer = Resolve<ICloudflareOpenApiFixer>(true);
+        var cloudflareOpenApiFixer = Resolve<IOpenApiFixer>(true);
 
         await cloudflareOpenApiFixer.Fix("c:\\cloudflare\\unformatted.json", "c:\\cloudflare\\fixed.json");
     }

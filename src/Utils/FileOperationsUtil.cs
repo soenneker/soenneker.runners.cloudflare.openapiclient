@@ -2,6 +2,7 @@
 using Soenneker.Extensions.String;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Git.Util.Abstract;
+using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.Dotnet.Abstract;
 using Soenneker.Utils.Environment;
@@ -25,19 +26,19 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IGitUtil _gitUtil;
     private readonly IDotnetUtil _dotnetUtil;
     private readonly IProcessUtil _processUtil;
-    private readonly ICloudflareOpenApiFixer _cloudflareOpenApiFixer;
+    private readonly IOpenApiFixer _openApiFixer;
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IFileUtilSync _fileUtilSync;
     private readonly IUsingsUtil _usingsUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil, IProcessUtil processUtil,
-        ICloudflareOpenApiFixer cloudflareOpenApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtilSync fileUtilSync, IUsingsUtil usingsUtil)
+        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtilSync fileUtilSync, IUsingsUtil usingsUtil)
     {
         _logger = logger;
         _gitUtil = gitUtil;
         _dotnetUtil = dotnetUtil;
         _processUtil = processUtil;
-        _cloudflareOpenApiFixer = cloudflareOpenApiFixer;
+        _openApiFixer = openApiFixer;
         _fileDownloadUtil = fileDownloadUtil;
         _fileUtilSync = fileUtilSync;
         _usingsUtil = usingsUtil;
@@ -58,7 +59,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string fixedFilePath = Path.Combine(gitDirectory, "fixed.json");
 
-        await _cloudflareOpenApiFixer.Fix(filePath, fixedFilePath, cancellationToken).NoSync();
+        await _openApiFixer.Fix(filePath, fixedFilePath, cancellationToken).NoSync();
 
         string srcDirectory = Path.Combine(gitDirectory, "src");
 

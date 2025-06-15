@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Soenneker.Managers.Runners.Registrars;
+using Soenneker.OpenApi.Fixer.Registrars;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.File.Download.Registrars;
@@ -24,8 +25,8 @@ public static class Startup
                 .AddScoped<IFileOperationsUtil, FileOperationsUtil>()
                 .AddRunnersManagerAsScoped()
                 .AddFileDownloadUtilAsScoped()
-                .AddScoped<ICloudflareOpenApiFixer, CloudflareOpenApiFixer>()
-                .AddUsingsUtilAsScoped();
+                .AddUsingsUtilAsScoped()
+                .AddOpenApiFixerAsScoped();
 
         return services;
     }
