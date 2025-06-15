@@ -24,6 +24,6 @@ public class CloudflareOpenApiFixerTests : FixturedUnitTest
     { 
         var cloudflareOpenApiFixer = Resolve<ICloudflareOpenApiFixer>(true);
 
-        await cloudflareOpenApiFixer.Fix("c:\\cloudflare\\input.json", "c:\\cloudflare\\fixed.json");
+        await cloudflareOpenApiFixer.Fix("c:\\cloudflare\\unformatted.json", "c:\\cloudflare\\fixed.json");
     }
 }
