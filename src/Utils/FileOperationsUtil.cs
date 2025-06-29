@@ -46,8 +46,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     public async ValueTask Process(CancellationToken cancellationToken = default)
     {
-        string gitDirectory =
-            await _gitUtil.CloneToTempDirectory($"https://github.com/soenneker/{Constants.Library.ToLowerInvariantFast()}", cancellationToken);
+        string gitDirectory = await _gitUtil.CloneToTempDirectory($"https://github.com/soenneker/{Constants.Library.ToLowerInvariantFast()}",
+            cancellationToken: cancellationToken);
 
         string targetFilePath = Path.Combine(gitDirectory, "openapi.json");
 
