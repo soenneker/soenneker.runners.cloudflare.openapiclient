@@ -315,7 +315,9 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         }
 
         string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
+        string name = EnvironmentUtil.GetVariableStrict("GIT__NAME");
+        string email = EnvironmentUtil.GetVariableStrict("GIT__EMAIL");
 
-        await _gitUtil.CommitAndPush(gitDirectory, "soenneker", "jake@soenneker.com", gitHubToken, "Automated update", cancellationToken);
+        await _gitUtil.CommitAndPush(gitDirectory, "Automated update", gitHubToken, name, email, cancellationToken);
     }
 }
