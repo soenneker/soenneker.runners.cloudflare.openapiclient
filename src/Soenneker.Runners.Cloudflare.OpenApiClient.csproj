@@ -43,12 +43,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="3.0.999" />
+        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="3.0.1004" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.6" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="3.0.1166" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="3.0.9" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="3.0.23" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="3.0.1214" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="3.0.1215" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.24" />
         <PackageReference Include="Soenneker.Utils.Usings" Version="3.0.42" />
     </ItemGroup>
