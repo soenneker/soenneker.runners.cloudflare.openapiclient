@@ -16,6 +16,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Soenneker.Utils.File.Abstract;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 
@@ -28,11 +29,11 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IProcessUtil _processUtil;
     private readonly IOpenApiFixer _openApiFixer;
     private readonly IFileDownloadUtil _fileDownloadUtil;
-    private readonly IFileUtilSync _fileUtilSync;
+    private readonly IFileUtil _fileUtil;
     private readonly IUsingsUtil _usingsUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil, IProcessUtil processUtil,
-        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtilSync fileUtilSync, IUsingsUtil usingsUtil)
+        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IUsingsUtil usingsUtil)
     {
         _logger = logger;
         _gitUtil = gitUtil;
@@ -40,7 +41,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         _processUtil = processUtil;
         _openApiFixer = openApiFixer;
         _fileDownloadUtil = fileDownloadUtil;
-        _fileUtilSync = fileUtilSync;
+        _fileUtil = fileUtil;
         _usingsUtil = usingsUtil;
     }
 
@@ -51,7 +52,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string targetFilePath = Path.Combine(gitDirectory, "openapi.json");
 
-        _fileUtilSync.DeleteIfExists(targetFilePath);
+        await _fileUtil.DeleteIfExists(targetFilePath, cancellationToken: cancellationToken);
 
         string? filePath = await _fileDownloadUtil.Download("https://raw.githubusercontent.com/cloudflare/api-schemas/refs/heads/main/openapi.json",
             targetFilePath, fileExtension: ".json", cancellationToken: cancellationToken);
