@@ -73,7 +73,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         await PostProcessKiotaClient(srcDirectory, cancellationToken);
         await FixEnumIdToString(srcDirectory, cancellationToken);
-        // await InjectEnumPropertyAndMethods(srcDirectory, cancellationToken);
 
         await FixPrimitiveCollectionNullability(srcDirectory, cancellationToken);
 
@@ -85,8 +84,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
 
         await _usingsUtil.AddMissing(projFilePath, true, 6, cancellationToken);
-
-        // bool successful = await _dotnetUtil.Build(projFilePath, true, "Release", false, cancellationToken: cancellationToken);
 
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
     }
@@ -196,7 +193,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         }
     }
 
-    private async ValueTask FixEnumIdToString(string srcDirectory, CancellationToken cancellationToken = default)
+    private static async ValueTask FixEnumIdToString(string srcDirectory, CancellationToken cancellationToken = default)
     {
         var rx = new Regex(@"Id\s*=\s*global::[A-Za-z0-9_.]+?\.(?<idMember>\w+);", RegexOptions.Multiline);
         foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
@@ -208,70 +205,10 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         }
     }
 
-    //    private async ValueTask InjectEnumPropertyAndMethods(string srcDirectory, CancellationToken cancellationToken = default)
-    //    {
-    //        // 1) Find all generated .cs files
-    //        string[] csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
-
-    //        // 2) Regex to detect the constructor that assigns the enum defaults
-    //        var ctorEnumRx = new Regex(
-    //            @"public\s+(?<cls>\w+)\s*\([^\)]*\)\s*:\s*base\s*\(\)\s*\{\s*(Id\s*=\s*.+;\s*)?Value\s*=\s*(?<enumFull>global::[^\s;]+)\.(?<member>\w+);",
-    //            RegexOptions.Singleline);
-
-    //        foreach (string file in csFiles)
-    //        {
-    //            string text = await File.ReadAllTextAsync(file, cancellationToken);
-    //            Match ctorMatch = ctorEnumRx.Match(text);
-    //            if (!ctorMatch.Success)
-    //                continue;
-
-    //            // Extract class name, enum full name, and member
-    //            string className = ctorMatch.Groups["cls"].Value;
-    //            string enumFull = ctorMatch.Groups["enumFull"].Value; // e.g. global::…Zones_pseudo_ipv4_value
-    //            string enumType = enumFull.Substring("global::".Length); // e.g. Soenneker.Cloudflare…Zones_pseudo_ipv4_value
-    //            string member = ctorMatch.Groups["member"].Value; // e.g. Off
-
-    //            // 3) Rewrite Id assignment from enum to string literal:
-    //            //    Id = global::…Zones_pseudo_ipv4_id.Pseudo_ipv4;
-    //            //  → Id = "pseudo_ipv4";
-    //            text = Regex.Replace(text, @"Id\s*=\s*global::[^\s;]+\.(?<idMember>\w+);", m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
-
-    //            // 4) Inject the new enum‐typed Value property (nullable) right inside the class body
-    //            var classBraceRx = new Regex($@"(public\s+partial\s+class\s+{Regex.Escape(className)}\b[^\r\n]*\r?\n\s*\{{\r?\n)", RegexOptions.Multiline);
-    //            text = classBraceRx.Replace(text, $@"$1        /// <summary>Strongly‐typed enum value</summary>
-    //        public new {enumType}? Value {{ get; set; }} = {enumFull}.{member};
-
-    //");
-
-    //            // 5) Replace the stub GetFieldDeserializers() with one that reads the enum
-    //            text = Regex.Replace(text,
-    //                @"public override IDictionary<string, Action<IParseNode>> GetFieldDeserializers\(\)\s*\{\s*return new Dictionary<string, Action<IParseNode>>\(base.GetFieldDeserializers\(\)\)\s*\{\s*\}\s*;\s*\}",
-    //                $@"public override IDictionary<string, Action<IParseNode>> GetFieldDeserializers()
-    //        {{
-    //            var map = new Dictionary<string, Action<IParseNode>>(base.GetFieldDeserializers());
-    //            map[""value""] = n => {{ Value = n.GetEnumValue<{enumType}>(); }};
-    //            return map;
-    //        }}");
-
-    //            // 6) Patch Serialize() to write out the enum value
-    //            text = Regex.Replace(text,
-    //                @"public override void Serialize\(ISerializationWriter writer\)\s*\{\s*_ = writer \?\? throw new ArgumentNullException\(nameof\(writer\)\);\s*base.Serialize\(writer\);\s*\}",
-    //                $@"public override void Serialize(ISerializationWriter writer)
-    //        {{
-    //            _ = writer ?? throw new ArgumentNullException(nameof(writer));
-    //            base.Serialize(writer);
-    //            writer.WriteEnumValue<{enumType}>(""value"", Value);
-    //        }}");
-
-    //            // 7) Write the modified code back
-    //            await File.WriteAllTextAsync(file, text, cancellationToken);
-    //        }
-    //    }
-
     /// <summary>
     /// Replace Expiry = "Now + 30 minutes"; with a real DateTimeOffset.Now.AddMinutes(30)
     /// </summary>
-    private async ValueTask FixExpiryDefault(string srcDirectory, CancellationToken cancellationToken = default)
+    private static async ValueTask FixExpiryDefault(string srcDirectory, CancellationToken cancellationToken = default)
     {
         // Matches any Expiry assignment in the parameterless ctor
         var rx = new Regex(@"Expiry\s*=\s*""[^""]*""\s*;", RegexOptions.Multiline);
@@ -285,7 +222,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         }
     }
 
-    private async ValueTask FixPrimitiveCollectionNullability(string srcDirectory, CancellationToken cancellationToken = default)
+    private static async ValueTask FixPrimitiveCollectionNullability(string srcDirectory, CancellationToken cancellationToken = default)
     {
         var rx = new Regex(@"GetCollectionOfPrimitiveValues<double\?>\(\)\?\.AsList\(\)\s*is\s*List<double>\s*(?<var>\w+)\)", RegexOptions.Singleline);
 
