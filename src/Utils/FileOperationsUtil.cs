@@ -66,10 +66,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         DeleteAllExceptCsproj(srcDirectory);
 
-        await _processUtil.Start("kiota", gitDirectory,
-                              $"kiota generate -l CSharp -d \"{fixedFilePath}\" -o src -c CloudflareOpenApiClient -n {Constants.Library} --ebc --cc", waitForExit: true,
-                              cancellationToken: cancellationToken)
-                          .NoSync();
+        await _openApiFixer.GenerateKiota(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
 
         await PostProcessKiotaClient(srcDirectory, cancellationToken);
         await FixEnumIdToString(srcDirectory, cancellationToken);
