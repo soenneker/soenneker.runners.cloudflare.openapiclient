@@ -85,7 +85,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
     }
 
-    private async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
+    private static async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
     {
         // Matches: PropertyName = "someValue";
         // where PropertyName is Headers or ExpectedCodes (add more as needed)
