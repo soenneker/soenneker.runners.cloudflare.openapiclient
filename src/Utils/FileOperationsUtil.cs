@@ -135,7 +135,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
             // Delete all empty subdirectories
             foreach (string dir in Directory.GetDirectories(directoryPath, "*", SearchOption.AllDirectories)
-                                            .OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
+                         .OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
             {
                 try
                 {

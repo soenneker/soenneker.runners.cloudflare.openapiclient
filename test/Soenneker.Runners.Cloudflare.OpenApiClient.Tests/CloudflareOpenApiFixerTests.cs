@@ -32,7 +32,7 @@ public class CloudflareOpenApiFixerTests : FixturedUnitTest
     [LocalFact]
     public async ValueTask Generate()
     {
-        await _fixer.GenerateKiota("c:\\cloudflare\\fixed.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
+        await _fixer.GenerateKiota("c:\\cloudflare\\fixed1.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
 
     }
 }
