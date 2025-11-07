@@ -49,6 +49,6 @@
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.35" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1284" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.28" />
-        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.77" />
+        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.78" />
     </ItemGroup>
 </Project>
