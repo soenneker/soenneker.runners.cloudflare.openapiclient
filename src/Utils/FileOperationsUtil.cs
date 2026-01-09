@@ -2,7 +2,6 @@
 using Soenneker.Extensions.String;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Git.Util.Abstract;
-using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.Dotnet.Abstract;
 using Soenneker.Utils.Environment;
@@ -16,6 +15,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Soenneker.Utils.File.Abstract;
+using Soenneker.OpenApi.Fixer.Abstract;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 

@@ -1,9 +1,9 @@
 ﻿using Soenneker.Facts.Local;
-using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Tests.FixturedUnit;
 using System.Threading.Tasks;
 using Soenneker.Extensions.ValueTask;
 using Xunit;
+using Soenneker.OpenApi.Fixer.Abstract;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Tests;
 
@@ -26,13 +26,19 @@ public class CloudflareOpenApiFixerTests : FixturedUnitTest
     [LocalFact]
     public async ValueTask Fix()
     { 
-        await _fixer.Fix("c:\\cloudflare\\unformatted.json", "c:\\cloudflare\\fixed1.json");
+        await _fixer.Fix("c:\\cloudflare\\openapi.json", "c:\\cloudflare\\fixed.json");
     }
 
     [LocalFact]
     public async ValueTask Generate()
     {
-        await _fixer.GenerateKiota("c:\\cloudflare\\fixed1.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
+        await _fixer.GenerateKiota("c:\\cloudflare\\fixed.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
+    }
 
+    [LocalFact]
+    public async ValueTask FixAndGenerate()
+    {
+        await Fix();
+        await Generate();
     }
 }
