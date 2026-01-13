@@ -60,13 +60,15 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string fixedFilePath = Path.Combine(gitDirectory, "fixed.json");
 
-        await _openApiFixer.Fix(filePath, fixedFilePath, cancellationToken).NoSync();
+        await _openApiFixer.Fix(filePath, fixedFilePath, cancellationToken)
+                           .NoSync();
 
         string srcDirectory = Path.Combine(gitDirectory, "src");
 
         DeleteAllExceptCsproj(srcDirectory);
 
-        await _openApiFixer.GenerateKiota(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
+        await _openApiFixer.GenerateKiota(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken)
+                           .NoSync();
 
         await PostProcessKiotaClient(srcDirectory, cancellationToken);
         await FixEnumIdToString(srcDirectory, cancellationToken);
@@ -82,7 +84,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         await _usingsUtil.AddMissing(projFilePath, true, 6, cancellationToken);
 
-        await BuildAndPush(gitDirectory, cancellationToken).NoSync();
+        await BuildAndPush(gitDirectory, cancellationToken)
+            .NoSync();
     }
 
     private static async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
@@ -135,11 +138,12 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
             // Delete all empty subdirectories
             foreach (string dir in Directory.GetDirectories(directoryPath, "*", SearchOption.AllDirectories)
-                         .OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
+                                            .OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
             {
                 try
                 {
-                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir)
+                                                           .Any())
                     {
                         Directory.Delete(dir, recursive: false);
                         _logger.LogInformation("Deleted empty directory: {DirectoryPath}", dir);
