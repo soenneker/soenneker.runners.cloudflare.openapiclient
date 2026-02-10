@@ -50,7 +50,7 @@
         <PackageReference Include="Soenneker.Utils.Directory" Version="4.0.781" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1415" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.28" />
-        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.149" />
+        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.150" />
         <PackageReference Include="Microsoft.Build.Framework" Version="18.0.2" ExcludeAssets="runtime" PrivateAssets="all">
             <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
