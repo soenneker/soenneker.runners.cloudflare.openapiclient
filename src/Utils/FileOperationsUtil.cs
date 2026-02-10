@@ -98,7 +98,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         // where PropertyName is Headers or ExpectedCodes (add more as needed)
         var rx = new Regex(@"\b(?<prop>Headers|ExpectedCodes)\s*=\s*""(?<val>[^""]+)""\s*;", RegexOptions.Multiline);
 
-        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        List<string> csFiles = await _directoryUtil.GetFilesByExtension(srcDirectory, "cs", true, cancellationToken);
+        foreach (string file in csFiles)
         {
             string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, m =>
