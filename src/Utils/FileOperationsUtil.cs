@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Soenneker.Extensions.String;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Git.Util.Abstract;
@@ -65,7 +65,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string srcDirectory = Path.Combine(gitDirectory, "src");
 
-        DeleteAllExceptCsproj(srcDirectory);
+        await DeleteAllExceptCsproj(srcDirectory, cancellationToken);
 
         await _openApiFixer.GenerateKiota(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken)
                            .NoSync();
@@ -88,7 +88,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             .NoSync();
     }
 
-    private static async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
+    private async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
     {
         // Matches: PropertyName = "someValue";
         // where PropertyName is Headers or ExpectedCodes (add more as needed)
@@ -96,7 +96,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            string text = await File.ReadAllTextAsync(file, cancellationToken);
+            string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, m =>
             {
                 string prop = m.Groups["prop"].Value;
@@ -105,11 +105,11 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             });
 
             if (newText != text)
-                await File.WriteAllTextAsync(file, newText, cancellationToken);
+                await _fileUtil.Write(file, newText, cancellationToken: cancellationToken);
         }
     }
 
-    public void DeleteAllExceptCsproj(string directoryPath)
+    public async ValueTask DeleteAllExceptCsproj(string directoryPath, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(directoryPath))
         {
@@ -126,7 +126,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                 {
                     try
                     {
-                        File.Delete(file);
+                        await _fileUtil.Delete(file, ignoreMissing: true, log: false, cancellationToken);
                         _logger.LogInformation("Deleted file: {FilePath}", file);
                     }
                     catch (Exception ex)
@@ -162,7 +162,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     }
 
     // call this right after kiota generate
-    private static async ValueTask PostProcessKiotaClient(string srcDirectory, CancellationToken cancellationToken = default)
+    private async ValueTask PostProcessKiotaClient(string srcDirectory, CancellationToken cancellationToken = default)
     {
         string[] csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
 
@@ -177,7 +177,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         foreach (string file in csFiles)
         {
-            string text = await File.ReadAllTextAsync(file, cancellationToken);
+            string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string original = text;
 
             // 1) Prefix any public property starting with a digit
@@ -190,50 +190,50 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             text = writeRx.Replace(text, m => $"{m.Value.Substring(0, m.Value.IndexOf('(') + 1)}\"{m.Groups["json"].Value}\", N{m.Groups["name"].Value})");
 
             if (text != original)
-                await File.WriteAllTextAsync(file, text, cancellationToken);
+                await _fileUtil.Write(file, text, cancellationToken: cancellationToken);
         }
     }
 
-    private static async ValueTask FixEnumIdToString(string srcDirectory, CancellationToken cancellationToken = default)
+    private async ValueTask FixEnumIdToString(string srcDirectory, CancellationToken cancellationToken = default)
     {
         var rx = new Regex(@"Id\s*=\s*global::[A-Za-z0-9_.]+?\.(?<idMember>\w+);", RegexOptions.Multiline);
         foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            string text = await File.ReadAllTextAsync(file, cancellationToken);
+            string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string replaced = rx.Replace(text, m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
             if (replaced != text)
-                await File.WriteAllTextAsync(file, replaced, cancellationToken);
+                await _fileUtil.Write(file, replaced, cancellationToken: cancellationToken);
         }
     }
 
     /// <summary>
     /// Replace Expiry = "Now + 30 minutes"; with a real DateTimeOffset.Now.AddMinutes(30)
     /// </summary>
-    private static async ValueTask FixExpiryDefault(string srcDirectory, CancellationToken cancellationToken = default)
+    private async ValueTask FixExpiryDefault(string srcDirectory, CancellationToken cancellationToken = default)
     {
         // Matches any Expiry assignment in the parameterless ctor
         var rx = new Regex(@"Expiry\s*=\s*""[^""]*""\s*;", RegexOptions.Multiline);
 
         foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            string text = await File.ReadAllTextAsync(file, cancellationToken);
+            string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, "Expiry = DateTimeOffset.Now.AddMinutes(30);");
             if (newText != text)
-                await File.WriteAllTextAsync(file, newText, cancellationToken);
+                await _fileUtil.Write(file, newText, cancellationToken: cancellationToken);
         }
     }
 
-    private static async ValueTask FixPrimitiveCollectionNullability(string srcDirectory, CancellationToken cancellationToken = default)
+    private async ValueTask FixPrimitiveCollectionNullability(string srcDirectory, CancellationToken cancellationToken = default)
     {
         var rx = new Regex(@"GetCollectionOfPrimitiveValues<double\?>\(\)\?\.AsList\(\)\s*is\s*List<double>\s*(?<var>\w+)\)", RegexOptions.Singleline);
 
         foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
         {
-            string text = await File.ReadAllTextAsync(file, cancellationToken);
+            string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, m => $"GetCollectionOfPrimitiveValues<double?>()?.AsList() is List<double?> {m.Groups["var"].Value})");
 
             if (newText != text)
-                await File.WriteAllTextAsync(file, newText, cancellationToken);
+                await _fileUtil.Write(file, newText, cancellationToken: cancellationToken);
         }
     }
 
