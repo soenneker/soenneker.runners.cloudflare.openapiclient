@@ -14,8 +14,10 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
 using Soenneker.OpenApi.Fixer.Abstract;
+using System.Collections.Generic;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Utils;
 
@@ -30,9 +32,10 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IFileUtil _fileUtil;
     private readonly IUsingsUtil _usingsUtil;
+    private readonly IDirectoryUtil _directoryUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil, IProcessUtil processUtil,
-        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IUsingsUtil usingsUtil)
+        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IUsingsUtil usingsUtil, IDirectoryUtil directoryUtil)
     {
         _logger = logger;
         _gitUtil = gitUtil;
@@ -42,6 +45,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         _fileDownloadUtil = fileDownloadUtil;
         _fileUtil = fileUtil;
         _usingsUtil = usingsUtil;
+        _directoryUtil = directoryUtil;
     }
 
     public async ValueTask Process(CancellationToken cancellationToken = default)
@@ -111,7 +115,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
     public async ValueTask DeleteAllExceptCsproj(string directoryPath, CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(directoryPath))
+        if (!(await _directoryUtil.Exists(directoryPath, cancellationToken)))
         {
             _logger.LogWarning("Directory does not exist: {DirectoryPath}", directoryPath);
             return;
@@ -120,7 +124,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         try
         {
             // Delete all files except .csproj
-            foreach (string file in Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories))
+            List<string> files = await _directoryUtil.GetFilesByExtension(directoryPath, "", true, cancellationToken);
+            foreach (string file in files)
             {
                 if (!file.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
                 {
@@ -137,15 +142,16 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
             }
 
             // Delete all empty subdirectories
-            foreach (string dir in Directory.GetDirectories(directoryPath, "*", SearchOption.AllDirectories)
-                                            .OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
+            List<string> dirs = await _directoryUtil.GetAllDirectoriesRecursively(directoryPath, cancellationToken);
+            foreach (string dir in dirs.OrderByDescending(d => d.Length)) // Sort by depth to delete from deepest first
             {
                 try
                 {
-                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir)
-                                                           .Any())
+                    List<string> dirFiles = await _directoryUtil.GetFilesByExtension(dir, "", false, cancellationToken);
+                    List<string> subDirs = await _directoryUtil.GetAllDirectories(dir, cancellationToken);
+                    if (dirFiles.Count == 0 && subDirs.Count == 0)
                     {
-                        Directory.Delete(dir, recursive: false);
+                        await _directoryUtil.Delete(dir, cancellationToken);
                         _logger.LogInformation("Deleted empty directory: {DirectoryPath}", dir);
                     }
                 }
@@ -164,7 +170,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     // call this right after kiota generate
     private async ValueTask PostProcessKiotaClient(string srcDirectory, CancellationToken cancellationToken = default)
     {
-        string[] csFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories);
+        List<string> csFiles = await _directoryUtil.GetFilesByExtension(srcDirectory, "cs", true, cancellationToken);
 
         // Regex to find properties whose name starts with a digit
         var propDeclRx = new Regex(@"public\s+([\w<>,\?\[\]]+)\s+([0-9]\w*)");
@@ -197,7 +203,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private async ValueTask FixEnumIdToString(string srcDirectory, CancellationToken cancellationToken = default)
     {
         var rx = new Regex(@"Id\s*=\s*global::[A-Za-z0-9_.]+?\.(?<idMember>\w+);", RegexOptions.Multiline);
-        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        List<string> csFiles = await _directoryUtil.GetFilesByExtension(srcDirectory, "cs", true, cancellationToken);
+        foreach (string file in csFiles)
         {
             string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string replaced = rx.Replace(text, m => $"Id = \"{m.Groups["idMember"].Value.ToLowerInvariant()}\";");
@@ -214,7 +221,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         // Matches any Expiry assignment in the parameterless ctor
         var rx = new Regex(@"Expiry\s*=\s*""[^""]*""\s*;", RegexOptions.Multiline);
 
-        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        List<string> csFiles = await _directoryUtil.GetFilesByExtension(srcDirectory, "cs", true, cancellationToken);
+        foreach (string file in csFiles)
         {
             string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, "Expiry = DateTimeOffset.Now.AddMinutes(30);");
@@ -227,7 +235,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     {
         var rx = new Regex(@"GetCollectionOfPrimitiveValues<double\?>\(\)\?\.AsList\(\)\s*is\s*List<double>\s*(?<var>\w+)\)", RegexOptions.Singleline);
 
-        foreach (string file in Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories))
+        List<string> csFiles = await _directoryUtil.GetFilesByExtension(srcDirectory, "cs", true, cancellationToken);
+        foreach (string file in csFiles)
         {
             string text = await _fileUtil.Read(file, cancellationToken: cancellationToken);
             string newText = rx.Replace(text, m => $"GetCollectionOfPrimitiveValues<double?>()?.AsList() is List<double?> {m.Groups["var"].Value})");
