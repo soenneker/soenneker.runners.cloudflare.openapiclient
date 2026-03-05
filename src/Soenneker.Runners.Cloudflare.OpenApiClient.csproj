@@ -46,7 +46,7 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.1851" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.146" />
-        <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.50" />
+        <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.51" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1464" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.28" />
         <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.166" />
