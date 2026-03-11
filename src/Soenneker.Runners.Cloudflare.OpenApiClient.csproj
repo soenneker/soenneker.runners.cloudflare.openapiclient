@@ -47,7 +47,7 @@
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.1930" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.170" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.57" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1508" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1509" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.28" />
         <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.188" />
         <PackageReference Include="Microsoft.Build.Framework" Version="18.4.0" ExcludeAssets="runtime" PrivateAssets="all">
