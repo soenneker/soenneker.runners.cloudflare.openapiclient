@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Soenneker.Runners.Cloudflare.OpenApiClient.csproj" />
+        <ProjectReference Include="..\..\src\Soenneker.Runners.Cloudflare.OpenApiClient\Soenneker.Runners.Cloudflare.OpenApiClient.csproj" />
     </ItemGroup>
 
     <ItemGroup>
