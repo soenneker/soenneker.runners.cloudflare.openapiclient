@@ -45,12 +45,12 @@
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1231" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
         <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.1" />
-        <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2016" />
-        <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.212" />
+        <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2021" />
+        <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.214" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.62" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1549" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1550" />
         <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.28" />
-        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.207" />
+        <PackageReference Include="Soenneker.Utils.Usings" Version="4.0.208" />
         <PackageReference Include="Microsoft.Build.Framework" Version="18.4.0" ExcludeAssets="runtime" PrivateAssets="all">
             <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
