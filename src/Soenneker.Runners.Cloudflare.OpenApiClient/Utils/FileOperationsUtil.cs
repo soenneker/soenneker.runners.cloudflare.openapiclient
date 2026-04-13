@@ -7,7 +7,6 @@ using Soenneker.Runners.Cloudflare.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.Dotnet.Abstract;
 using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Download.Abstract;
-using Soenneker.Utils.Usings.Abstract;
 using System;
 using System.IO;
 using System.Linq;
@@ -31,11 +30,10 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IOpenApiFixer _openApiFixer;
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IFileUtil _fileUtil;
-    private readonly IUsingsUtil _usingsUtil;
     private readonly IDirectoryUtil _directoryUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil,
-        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IUsingsUtil usingsUtil, IDirectoryUtil directoryUtil,
+        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
         IKiotaUtil kiotaUtil)
     {
         _logger = logger;
@@ -45,7 +43,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         _openApiFixer = openApiFixer;
         _fileDownloadUtil = fileDownloadUtil;
         _fileUtil = fileUtil;
-        _usingsUtil = usingsUtil;
         _directoryUtil = directoryUtil;
     }
 
@@ -86,8 +83,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         string projFilePath = Path.Combine(gitDirectory, "src", Constants.Library, $"{Constants.Library}.csproj");
 
         await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
-
-        await _usingsUtil.AddMissing(projFilePath, true, 6, cancellationToken);
 
         await BuildAndPush(gitDirectory, cancellationToken)
             .NoSync();
