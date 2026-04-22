@@ -1,44 +1,43 @@
-﻿using Soenneker.Facts.Local;
-using Soenneker.Tests.FixturedUnit;
+using Soenneker.Tests.Attributes.Local;
+using Soenneker.Tests.HostedUnit;
 using System.Threading.Tasks;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Kiota.Util.Abstract;
-using Xunit;
 using Soenneker.OpenApi.Fixer.Abstract;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient.Tests;
 
-[Collection("Collection")]
-public class CloudflareOpenApiFixerTests : FixturedUnitTest
+[ClassDataSource<Host>(Shared = SharedType.PerTestSession)]
+public class CloudflareOpenApiFixerTests : HostedUnitTest
 {
     private readonly IOpenApiFixer _fixer;
     private readonly IKiotaUtil _util;
 
-    public CloudflareOpenApiFixerTests(Fixture fixture, ITestOutputHelper output) : base(fixture, output)
+    public CloudflareOpenApiFixerTests(Host host) : base(host)
     {
         _fixer = Resolve<IOpenApiFixer>(true);
         _util = Resolve<IKiotaUtil>(true);
     }
 
-    [Fact]
+    [Test]
     public void Default()
     {
 
     }
 
-    [LocalFact]
+    [LocalOnly]
     public async ValueTask Fix()
     { 
         await _fixer.Fix("c:\\cloudflare\\openapi.json", "c:\\cloudflare\\fixed.json");
     }
 
-    [LocalFact]
+    [LocalOnly]
     public async ValueTask Generate()
     {
         await _util.Generate("c:\\cloudflare\\fixed.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
     }
 
-    [LocalFact]
+    [LocalOnly]
     public async ValueTask FixAndGenerate()
     {
         await Fix();
