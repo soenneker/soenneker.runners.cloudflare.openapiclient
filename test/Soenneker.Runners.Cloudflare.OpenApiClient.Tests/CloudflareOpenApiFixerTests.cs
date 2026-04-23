@@ -34,7 +34,7 @@ public class CloudflareOpenApiFixerTests : HostedUnitTest
     [LocalOnly]
     public async ValueTask Generate()
     {
-        await _util.Generate("c:\\cloudflare\\fixed.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", CancellationToken).NoSync();
+        await _util.Generate("c:\\cloudflare\\fixed.json", "CloudflareOpenApiClient", Constants.Library, @"c:\cloudflare\dir", System.Threading.CancellationToken.None).NoSync();
     }
 
     [LocalOnly]
@@ -44,3 +44,4 @@ public class CloudflareOpenApiFixerTests : HostedUnitTest
         await Generate();
     }
 }
+
