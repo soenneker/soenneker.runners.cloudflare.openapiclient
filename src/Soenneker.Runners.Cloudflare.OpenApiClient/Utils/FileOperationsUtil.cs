@@ -32,9 +32,8 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
 
-    public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil,
-        IOpenApiFixer openApiFixer, IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
-        IKiotaUtil kiotaUtil)
+    public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IGitUtil gitUtil, IDotnetUtil dotnetUtil, IOpenApiFixer openApiFixer,
+        IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IKiotaUtil kiotaUtil)
     {
         _logger = logger;
         _gitUtil = gitUtil;
@@ -62,15 +61,13 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string fixedFilePath = Path.Combine(gitDirectory, "fixed.json");
 
-        await _openApiFixer.Fix(filePath, fixedFilePath, cancellationToken)
-                           .NoSync();
+        await _openApiFixer.Fix(filePath, fixedFilePath, cancellationToken);
 
         string srcDirectory = Path.Combine(gitDirectory, "src", Constants.Library);
 
         await DeleteAllExceptCsproj(srcDirectory, cancellationToken);
 
-        await _kiotaUtil.Generate(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken)
-                        .NoSync();
+        await _kiotaUtil.Generate(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
 
         await PostProcessKiotaClient(srcDirectory, cancellationToken);
         await FixEnumIdToString(srcDirectory, cancellationToken);
@@ -84,8 +81,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         await _dotnetUtil.Restore(projFilePath, cancellationToken: cancellationToken);
 
-        await BuildAndPush(gitDirectory, cancellationToken)
-            .NoSync();
+        await BuildAndPush(gitDirectory, cancellationToken);
     }
 
     private async ValueTask FixStringListDefaults(string srcDirectory, CancellationToken cancellationToken = default)
