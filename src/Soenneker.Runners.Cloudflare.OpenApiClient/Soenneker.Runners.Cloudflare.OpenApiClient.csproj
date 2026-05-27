@@ -43,9 +43,9 @@
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1254" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
-        <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.23" />
-        <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2120" />
-        <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.240" />
+        <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.24" />
+        <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2121" />
+        <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.241" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.67" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1598" />
     </ItemGroup>
