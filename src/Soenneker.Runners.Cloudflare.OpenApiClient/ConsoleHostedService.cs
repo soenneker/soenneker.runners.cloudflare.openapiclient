@@ -9,6 +9,9 @@ using Soenneker.Utils.Delay;
 
 namespace Soenneker.Runners.Cloudflare.OpenApiClient;
 
+/// <summary>
+/// Represents the console hosted service.
+/// </summary>
 public class ConsoleHostedService : IHostedService
 {
     private readonly ILogger<ConsoleHostedService> _logger;
@@ -25,6 +28,11 @@ public class ConsoleHostedService : IHostedService
         _fileOperationsUtil = fileOperationsUtil;
     }
 
+    /// <summary>
+    /// Executes the start async operation.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
         _appLifetime.ApplicationStarted.Register(() =>
@@ -62,6 +70,11 @@ public class ConsoleHostedService : IHostedService
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Executes the stop async operation.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("Exiting with return code: {exitCode}", _exitCode);

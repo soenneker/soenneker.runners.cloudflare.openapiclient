@@ -106,6 +106,12 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         }
     }
 
+    /// <summary>
+    /// Deletes all except csproj.
+    /// </summary>
+    /// <param name="directoryPath">The directory path.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public async ValueTask DeleteAllExceptCsproj(string directoryPath, CancellationToken cancellationToken = default)
     {
         if (!(await _directoryUtil.Exists(directoryPath, cancellationToken)))

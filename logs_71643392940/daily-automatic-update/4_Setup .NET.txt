@@ -1,0 +1,19 @@
+﻿2026-05-31T22:46:22.3406960Z ##[group]Run actions/setup-dotnet@v5
+2026-05-31T22:46:22.3407696Z with:
+2026-05-31T22:46:22.3408226Z   dotnet-version: 10.0.x
+2026-05-31T22:46:22.3408788Z   cache: false
+2026-05-31T22:46:22.3409280Z env:
+2026-05-31T22:46:22.3409816Z   GH__USERNAME: ***
+2026-05-31T22:46:22.3410488Z   GH__TOKEN: ***
+2026-05-31T22:46:22.3411041Z   GIT__NAME: ***
+2026-05-31T22:46:22.3411661Z   GIT__EMAIL: ***
+2026-05-31T22:46:22.3412349Z   NUGET__TOKEN: ***
+2026-05-31T22:46:22.3412986Z   GIT__TOKEN: ***
+2026-05-31T22:46:22.3413522Z   PipelineEnvironment: true
+2026-05-31T22:46:22.3414116Z   NUGET_XMLDOC_MODE: skip
+2026-05-31T22:46:22.3414667Z   BUILD_VERSION: 4.0.608
+2026-05-31T22:46:22.3415214Z ##[endgroup]
+2026-05-31T22:46:22.4949683Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --runtime dotnet --channel LTS
+2026-05-31T22:46:22.7437241Z dotnet-install: .NET Core Runtime with version '10.0.8' is already installed.
+2026-05-31T22:46:22.7463786Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --channel 10.0
+2026-05-31T22:46:22.9663864Z dotnet-install: .NET Core SDK with version '10.0.300' is already installed.

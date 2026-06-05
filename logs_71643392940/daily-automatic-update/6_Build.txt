@@ -1,0 +1,27 @@
+﻿2026-05-31T22:46:33.9782083Z ##[group]Run dotnet build src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj --configuration Release --no-restore
+2026-05-31T22:46:33.9783464Z [36;1mdotnet build src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj --configuration Release --no-restore[0m
+2026-05-31T22:46:33.9815022Z shell: /usr/bin/bash -e {0}
+2026-05-31T22:46:33.9815367Z env:
+2026-05-31T22:46:33.9815933Z   GH__USERNAME: ***
+2026-05-31T22:46:33.9816475Z   GH__TOKEN: ***
+2026-05-31T22:46:33.9816785Z   GIT__NAME: ***
+2026-05-31T22:46:33.9817143Z   GIT__EMAIL: ***
+2026-05-31T22:46:33.9817540Z   NUGET__TOKEN: ***
+2026-05-31T22:46:33.9817912Z   GIT__TOKEN: ***
+2026-05-31T22:46:33.9818198Z   PipelineEnvironment: true
+2026-05-31T22:46:33.9818517Z   NUGET_XMLDOC_MODE: skip
+2026-05-31T22:46:33.9818822Z   BUILD_VERSION: 4.0.608
+2026-05-31T22:46:33.9819165Z   DOTNET_ROOT: /usr/share/dotnet
+2026-05-31T22:46:33.9819483Z ##[endgroup]
+2026-05-31T22:46:39.8144113Z ##[warning]/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Utils/FileOperationsUtil.cs(64,33): warning CS8604: Possible null reference argument for parameter 'sourceFilePath' in 'ValueTask IOpenApiFixer.Fix(string sourceFilePath, string targetFilePath, CancellationToken cancellationToken = default(CancellationToken))'. [/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj]
+2026-05-31T22:46:39.8170537Z ##[warning]/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Program.cs(52,64): warning CS8604: Possible null reference argument for parameter 'name' in 'DeployEnvironment DeployEnvironment.FromName(string name)'. [/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj]
+2026-05-31T22:46:40.0887347Z   Soenneker.Runners.Cloudflare.OpenApiClient -> /home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/bin/Release/net10.0/Soenneker.Runners.Cloudflare.OpenApiClient.dll
+2026-05-31T22:46:40.1269462Z 
+2026-05-31T22:46:40.1277116Z Build succeeded.
+2026-05-31T22:46:40.1277416Z 
+2026-05-31T22:46:40.1283182Z ##[warning]/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Utils/FileOperationsUtil.cs(64,33): warning CS8604: Possible null reference argument for parameter 'sourceFilePath' in 'ValueTask IOpenApiFixer.Fix(string sourceFilePath, string targetFilePath, CancellationToken cancellationToken = default(CancellationToken))'. [/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj]
+2026-05-31T22:46:40.1295826Z ##[warning]/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Program.cs(52,64): warning CS8604: Possible null reference argument for parameter 'name' in 'DeployEnvironment DeployEnvironment.FromName(string name)'. [/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj]
+2026-05-31T22:46:40.1300656Z     2 Warning(s)
+2026-05-31T22:46:40.1301102Z     0 Error(s)
+2026-05-31T22:46:40.1301382Z 
+2026-05-31T22:46:40.1301636Z Time Elapsed 00:00:05.86

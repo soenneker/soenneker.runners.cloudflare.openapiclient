@@ -1,0 +1,17 @@
+﻿2026-05-31T22:46:22.9859171Z ##[group]Run dotnet restore src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj
+2026-05-31T22:46:22.9863919Z [36;1mdotnet restore src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj[0m
+2026-05-31T22:46:22.9897504Z shell: /usr/bin/bash -e {0}
+2026-05-31T22:46:22.9898791Z env:
+2026-05-31T22:46:22.9900056Z   GH__USERNAME: ***
+2026-05-31T22:46:22.9901518Z   GH__TOKEN: ***
+2026-05-31T22:46:22.9902598Z   GIT__NAME: ***
+2026-05-31T22:46:22.9903921Z   GIT__EMAIL: ***
+2026-05-31T22:46:22.9905400Z   NUGET__TOKEN: ***
+2026-05-31T22:46:22.9906951Z   GIT__TOKEN: ***
+2026-05-31T22:46:22.9908066Z   PipelineEnvironment: true
+2026-05-31T22:46:22.9909307Z   NUGET_XMLDOC_MODE: skip
+2026-05-31T22:46:22.9910481Z   BUILD_VERSION: 4.0.608
+2026-05-31T22:46:22.9911667Z   DOTNET_ROOT: /usr/share/dotnet
+2026-05-31T22:46:22.9912915Z ##[endgroup]
+2026-05-31T22:46:26.8812631Z   Determining projects to restore...
+2026-05-31T22:46:33.9320003Z   Restored /home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/src/Soenneker.Runners.Cloudflare.OpenApiClient/Soenneker.Runners.Cloudflare.OpenApiClient.csproj (in 6.22 sec).

@@ -1,0 +1,92 @@
+﻿2026-05-31T22:46:21.8030166Z ##[group]Run actions/checkout@v6
+2026-05-31T22:46:21.8031217Z with:
+2026-05-31T22:46:21.8031788Z   persist-credentials: true
+2026-05-31T22:46:21.8032673Z   repository: ***/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:21.8038134Z   token: ***
+2026-05-31T22:46:21.8038676Z   ssh-strict: true
+2026-05-31T22:46:21.8039197Z   ssh-user: git
+2026-05-31T22:46:21.8039697Z   clean: true
+2026-05-31T22:46:21.8040230Z   sparse-checkout-cone-mode: true
+2026-05-31T22:46:21.8040857Z   fetch-depth: 1
+2026-05-31T22:46:21.8041384Z   fetch-tags: false
+2026-05-31T22:46:21.8041924Z   show-progress: true
+2026-05-31T22:46:21.8042489Z   lfs: false
+2026-05-31T22:46:21.8042982Z   submodules: false
+2026-05-31T22:46:21.8043523Z   set-safe-directory: true
+2026-05-31T22:46:21.8044376Z env:
+2026-05-31T22:46:21.8044941Z   GH__USERNAME: ***
+2026-05-31T22:46:21.8045821Z   GH__TOKEN: ***
+2026-05-31T22:46:21.8046397Z   GIT__NAME: ***
+2026-05-31T22:46:21.8047031Z   GIT__EMAIL: ***
+2026-05-31T22:46:21.8047731Z   NUGET__TOKEN: ***
+2026-05-31T22:46:21.8048437Z   GIT__TOKEN: ***
+2026-05-31T22:46:21.8048979Z   PipelineEnvironment: true
+2026-05-31T22:46:21.8049574Z   NUGET_XMLDOC_MODE: skip
+2026-05-31T22:46:21.8050128Z ##[endgroup]
+2026-05-31T22:46:21.9035482Z Syncing repository: ***/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:21.9038671Z ##[group]Getting Git version info
+2026-05-31T22:46:21.9040219Z Working directory is '/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient'
+2026-05-31T22:46:21.9041980Z [command]/usr/bin/git version
+2026-05-31T22:46:21.9152682Z git version 2.54.0
+2026-05-31T22:46:21.9186852Z ##[endgroup]
+2026-05-31T22:46:21.9206003Z Temporarily overriding HOME='/home/runner/work/_temp/d0b317b7-8a18-47fd-8472-583a08a7db22' before making global git config changes
+2026-05-31T22:46:21.9208067Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-31T22:46:21.9213917Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:21.9280342Z Deleting the contents of '/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient'
+2026-05-31T22:46:21.9284249Z ##[group]Initializing the repository
+2026-05-31T22:46:21.9291250Z [command]/usr/bin/git init /home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:21.9432179Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-31T22:46:21.9433542Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-31T22:46:21.9434667Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-31T22:46:21.9435853Z hint: call:
+2026-05-31T22:46:21.9436506Z hint:
+2026-05-31T22:46:21.9437170Z hint: 	git config --global init.defaultBranch <name>
+2026-05-31T22:46:21.9437920Z hint:
+2026-05-31T22:46:21.9438647Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-31T22:46:21.9439852Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-31T22:46:21.9440780Z hint:
+2026-05-31T22:46:21.9441301Z hint: 	git branch -m <name>
+2026-05-31T22:46:21.9441917Z hint:
+2026-05-31T22:46:21.9442704Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-31T22:46:21.9452545Z Initialized empty Git repository in /home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/.git/
+2026-05-31T22:46:21.9468607Z [command]/usr/bin/git remote add origin https://github.com/***/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:21.9526394Z ##[endgroup]
+2026-05-31T22:46:21.9527848Z ##[group]Disabling automatic garbage collection
+2026-05-31T22:46:21.9531628Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-31T22:46:21.9566861Z ##[endgroup]
+2026-05-31T22:46:21.9567762Z ##[group]Setting up auth
+2026-05-31T22:46:21.9568979Z Removing SSH command configuration
+2026-05-31T22:46:21.9579038Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-31T22:46:21.9628781Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-31T22:46:22.0018906Z Removing HTTP extra header
+2026-05-31T22:46:22.0025326Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-31T22:46:22.0061512Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-31T22:46:22.0303289Z Removing includeIf entries pointing to credentials config files
+2026-05-31T22:46:22.0309507Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-31T22:46:22.0346191Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-31T22:46:22.0589233Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-6b076e2b-b886-4ce3-bca4-42e5d67ddd61.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-31T22:46:22.0629316Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/.git.path /home/runner/work/_temp/git-credentials-6b076e2b-b886-4ce3-bca4-42e5d67ddd61.config
+2026-05-31T22:46:22.0662044Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/***.runners.cloudflare.openapiclient/***.runners.cloudflare.openapiclient/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-6b076e2b-b886-4ce3-bca4-42e5d67ddd61.config
+2026-05-31T22:46:22.0696642Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-6b076e2b-b886-4ce3-bca4-42e5d67ddd61.config
+2026-05-31T22:46:22.0732707Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-6b076e2b-b886-4ce3-bca4-42e5d67ddd61.config
+2026-05-31T22:46:22.0763975Z ##[endgroup]
+2026-05-31T22:46:22.0766277Z ##[group]Fetching the repository
+2026-05-31T22:46:22.0776356Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +c922cd351e9689618703ee8b15363f42c7d7fd72:refs/remotes/origin/main
+2026-05-31T22:46:22.2606418Z From https://github.com/***/***.runners.cloudflare.openapiclient
+2026-05-31T22:46:22.2608849Z  * [new ref]         c922cd351e9689618703ee8b15363f42c7d7fd72 -> origin/main
+2026-05-31T22:46:22.2652628Z [command]/usr/bin/git branch --list --remote origin/main
+2026-05-31T22:46:22.2678773Z   origin/main
+2026-05-31T22:46:22.2687574Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+2026-05-31T22:46:22.2710494Z c922cd351e9689618703ee8b15363f42c7d7fd72
+2026-05-31T22:46:22.2715112Z ##[endgroup]
+2026-05-31T22:46:22.2716702Z ##[group]Determining the checkout info
+2026-05-31T22:46:22.2717741Z ##[endgroup]
+2026-05-31T22:46:22.2720647Z [command]/usr/bin/git sparse-checkout disable
+2026-05-31T22:46:22.2764297Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-31T22:46:22.2790552Z ##[group]Checking out the ref
+2026-05-31T22:46:22.2793924Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-05-31T22:46:22.2860533Z Switched to a new branch 'main'
+2026-05-31T22:46:22.2863883Z branch 'main' set up to track 'origin/main'.
+2026-05-31T22:46:22.2870043Z ##[endgroup]
+2026-05-31T22:46:22.2909295Z [command]/usr/bin/git log -1 --format=%H
+2026-05-31T22:46:22.2932460Z c922cd351e9689618703ee8b15363f42c7d7fd72
