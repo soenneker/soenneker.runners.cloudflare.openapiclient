@@ -46,7 +46,7 @@
         <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.91" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2391" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.309" />
-        <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.79" />
+        <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.82" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1695" />
     </ItemGroup>
 </Project>
