@@ -47,6 +47,6 @@
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2514" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.346" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.87" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1754" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1755" />
     </ItemGroup>
 </Project>
