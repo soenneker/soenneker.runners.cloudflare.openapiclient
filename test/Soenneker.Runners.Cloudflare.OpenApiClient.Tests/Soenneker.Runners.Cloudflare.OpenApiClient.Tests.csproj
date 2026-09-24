@@ -26,4 +26,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Soenneker.Runners.Cloudflare.OpenApiClient\Soenneker.Runners.Cloudflare.OpenApiClient.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.123" />
+    </ItemGroup>
 </Project>
