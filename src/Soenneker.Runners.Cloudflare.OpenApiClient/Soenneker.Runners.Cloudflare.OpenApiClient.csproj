@@ -51,7 +51,7 @@
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1793" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Soenneker.Enums.DeployEnvironment" Version="4.0.246" />
+        <PackageReference Include="Soenneker.Enums.DeployEnvironment" Version="4.0.247" />
         <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.125" />
     </ItemGroup>
 </Project>
