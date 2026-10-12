@@ -42,16 +42,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1418" />
+        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1419" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
-        <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.149" />
+        <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.150" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2616" />
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.381" />
         <PackageReference Include="Soenneker.Utils.Delay" Version="4.0.93" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1799" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Soenneker.Enums.DeployEnvironment" Version="4.0.247" />
-        <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.125" />
+        <PackageReference Include="Soenneker.Enums.DeployEnvironment" Version="4.0.248" />
+        <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.126" />
     </ItemGroup>
 </Project>
