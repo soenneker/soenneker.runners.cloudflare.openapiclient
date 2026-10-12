@@ -42,7 +42,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1417" />
+        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1418" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
         <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.148" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2608" />
