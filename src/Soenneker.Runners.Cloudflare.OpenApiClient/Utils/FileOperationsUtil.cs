@@ -68,6 +68,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await DeleteAllExceptCsproj(srcDirectory, cancellationToken);
 
         await _kiotaUtil.Generate(fixedFilePath, "CloudflareOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
+        await _openApiFixer.SanitizeGeneratedEnumMembers(Path.Combine(gitDirectory, "src", Constants.Library), cancellationToken).NoSync();
 
         await PostProcessKiotaClient(srcDirectory, cancellationToken);
         await FixEnumIdToString(srcDirectory, cancellationToken);
